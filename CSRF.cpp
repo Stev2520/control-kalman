@@ -1,6 +1,7 @@
 #include "kalman.hpp"
+#include <cmath>
 using namespace kalman;
-CSRF::CSRF(const size_t nx) : x_(Eigen::VectorXd::Zero(nx)), L_(Eigen::MatrixXd::Zero(nx, 0)), G_(Eigen::MatrixXd::Zero(nx, 0)), initialized_(false) { }
+CSRF::CSRF(const size_t nx) : x_(Eigen::VectorXd::Zero(nx)), L_(Eigen::MatrixXd::Zero(nx, 0)), G_(Eigen::MatrixXd::Zero(nx, 0)) { }
 CSRF::CSRF(const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0, const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, const Eigen::MatrixXd& C, const Eigen::MatrixXd& D, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R, const Eigen::VectorXd &u, const Eigen::VectorXd &y)
     : x_(x0), A_(A), C_(C), D_(D)
 {
@@ -52,107 +53,52 @@ CSRF::CSRF(const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0, const Eigen::Ma
     }
     const size_t rank = n1 + n2;
     L_ = Eigen::MatrixXd(nx, rank);
-    Sigma_ = Eigen::MatrixXd::Zero(rank, rank);
-    size_t col = 0;
+    Sigma_p_ = Eigen::MatrixXd::Identity(ny + rank, ny + rank);
+    size_t col = ny;
     for (int i = 0; i < eigenvalues.size(); ++i)
         if (eigenvalues(i) > 1e-10)
         {
             L_.col(col) = eigenvectors.col(i) * std::sqrt(eigenvalues(i));
-            Sigma_(col, col) = 1;
+            Sigma_p_(col, col) = 1;
             ++col;
         }
     for (int i = 0; i < eigenvalues.size(); ++i)
         if (eigenvalues(i) < -1e-10)
         {
             L_.col(col) = eigenvectors.col(i) * std::sqrt(eigenvalues(i));
-            Sigma_(col, col) = -1;
+            Sigma_p_(col, col) = -1;
             ++col;
         }
 }
-
 void CSRF::step(const Eigen::VectorXd &u, const Eigen::VectorXd &y)
 {
-    const size_t nx = x_.size(), ny = y.size(), nu = u.size();
+    const size_t nx = x_.size(), ny = y.size(), nu = u.size(), nL = L_.cols();
     assert(y.size() == SRe_.rows() && u.size() == D_.cols());
-    Eigen::MatrixXd pre = Eigen::MatrixXd(nx + ny, nx + L_.cols());
+    Eigen::MatrixXd pre = Eigen::MatrixXd(nx + ny, nx + nL);
     pre.block(0, 0, ny, ny) = SRe_;
     pre.block(ny, 0, nx, ny) = G_;
-    pre.block(0, ny, ny, L_.cols()) = C_ * L_;
-    pre.block(ny, ny, nx, L_.cols()) = A_ * L_;
-
+    pre.block(0, ny, ny, nL) = C_ * L_;
+    pre.block(ny, ny, nx, nL) = A_ * L_;
+    applySigmaUnitary(pre);
+    SRe_ = pre.block(0, 0, ny, ny);
+    G_ = pre.block(ny, 0, nx, ny);
+    L_ = pre.block(ny, ny, nx, nL);
+    x_ = A_ * x_ + G_ * SRe_ * (y - C_ * x_) + D_ * u;
 }
-void CSRF::step(const Eigen::VectorXd &u, const Eigen::VectorXd &y)
+void CSRF::applySigmaUnitary(Eigen::MatrixXd& prearray)
 {
-    const size_t nx = x_.size(), ny = y.size(), nw = B.cols();
+    const size_t n = prearray.cols();
     
-    if (!initialized_)
+    for (size_t k = 0; k < n - 1; ++k)
     {
-        // Initial covariance computation as in paper
-        Eigen::MatrixXd P0 = S_ * S_.transpose();  // P_{0|-1}
-        Eigen::MatrixXd P1 = A * P0 * A.transpose() + B * Q * B.transpose(); // P_{1|0}
-        
-        // Initial increment and L_0 factorization
-        Eigen::MatrixXd incP0 = P1 - P0;
-        
-        // Compute signature matrix Σ and L_0 from incP0 = L_0 Σ L_0ᵀ
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(incP0);
-        Eigen::VectorXd eigenvalues = es.eigenvalues();
-        Eigen::MatrixXd eigenvectors = es.eigenvectors();
-        
-        // Determine signature (n1 positive, n2 negative eigenvalues)
-        n1_ = n2_ = 0;
-        for (int i = 0; i < eigenvalues.size(); ++i)
-        {
-            if (eigenvalues(i) > 1e-10) ++n1_;
-            else if (eigenvalues(i) < -1e-10) ++n2_;
-        }
-        
-        // Build L_0 and Σ
-        L_ = Eigen::MatrixXd(nx, n1_ + n2_);
-        Sigma_ = Eigen::MatrixXd::Zero(n1_ + n2_, n1_ + n2_);
-        
-        int col = 0;
-        for (int i = 0; i < eigenvalues.size(); ++i) {
-            if (std::abs(eigenvalues(i)) > 1e-10) {
-                L_.col(col) = eigenvectors.col(i) * std::sqrt(std::abs(eigenvalues(i)));
-                Sigma_(col, col) = (eigenvalues(i) > 0) ? 1 : -1;
-                col++;
-            }
-        }
-        
-        // Initial G_0 computation
-        Eigen::MatrixXd Re0 = R + C * P0 * C.transpose();
-        Eigen::MatrixXd Re_sqrt = Eigen::LLT<Eigen::MatrixXd>(Re0).matrixL();
-        G_ = A * P0 * C.transpose() * Re_sqrt.inverse();
-        
-        initialized_ = true;
+        Eigen::VectorXd v = prearray.block(k, k, prearray.rows() - k, 1);
+        double sigma_norm = std::sqrt(std::abs(v.transpose() * Sigma_p_.block(k, k, v.size(), v.size()) * v));
+        if (sigma_norm < 1e-10) continue;
+        v(0) += (v(0) >= 0) ? sigma_norm : -sigma_norm;
+        const double tau = (v.transpose() * Sigma_p_.block(k, k, v.size(), v.size()) * v)(0) * .5;
+        if (std::abs(tau) < 1e-10) continue;
+        // Apply the skew Householder transformation: I - (u * uᵀ * Σ) / τ
+        for (size_t j = k; j < n; ++j)
+            prearray.block(k, j, prearray.rows() - k, 1) -= v * (v.transpose() * Sigma_p_.block(k, k, v.size(), v.size()) * prearray.block(k, j, prearray.rows() - k, 1))(0) / tau;
     }
-    
-    // Build the prearray matrix from equation (16)
-    Eigen::MatrixXd Re_sqrt = Eigen::LLT<Eigen::MatrixXd>(R + C * L_ * Sigma_ * L_.transpose() * C.transpose()).matrixL();
-    
-    Eigen::MatrixXd prearray(ny + nx, ny + L_.cols());
-    prearray.setZero();
-    prearray.block(0, 0, ny, ny) = Re_sqrt;
-    prearray.block(0, ny, ny, L_.cols()) = C * L_;
-    prearray.block(ny, 0, nx, ny) = G_;
-    prearray.block(ny, ny, nx, L_.cols()) = A * L_;
-    
-    // Apply Σ-unitary transformation (simplified - would need skew Householder)
-    // This is the complex part requiring indefinite norm transformations
-    Eigen::MatrixXd Sigma_p = Eigen::MatrixXd::Identity(ny + L_.cols(), ny + L_.cols());
-    Sigma_p.block(ny, ny, L_.cols(), L_.cols()) = Sigma_;
-    
-    // For now, using standard QR as approximation - NOT the true Chandrasekhar form
-    Eigen::MatrixXd postarray = prearray; // Placeholder - needs Σ-unitary transform
-    
-    // Extract results  
-    Eigen::MatrixXd Re_sqrt_new = postarray.block(0, 0, ny, ny);
-    Eigen::MatrixXd L_new = postarray.block(ny, ny, nx, L_.cols());
-    G_ = postarray.block(ny, 0, nx, ny);
-    
-    L_ = L_new;
-    
-    // State update - equation (17)
-    x_ = A * x_ - G_ * Re_sqrt_new.inverse() * (C * x_ - y) + D * u;
 }
