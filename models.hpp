@@ -34,10 +34,10 @@ namespace kalman_noise
 namespace model0
 {
     const double b = 1;
-    Eigen::Matrix2d Q(double t = 0.0) 
+    Eigen::MatrixXd Q(double t = 0.0) 
     {
-        static const Eigen::Matrix2d Q_const = []() {
-            Eigen::Matrix2d q;
+        static const Eigen::MatrixXd Q_const = []() {
+            Eigen::MatrixXd q(2, 2);
             q << 0.1, 0.0,
                  0.0, 0.2;
             return q;
@@ -45,10 +45,10 @@ namespace model0
         return Q_const;  // Always returns the same matrix
     }
     
-    Eigen::Matrix2d R(double t = 0.0) 
+    Eigen::MatrixXd R(double t = 0.0) 
     {
-        static const Eigen::Matrix2d R_const = []() {
-            Eigen::Matrix2d r;
+        static const Eigen::MatrixXd R_const = []() {
+            Eigen::MatrixXd r(2, 2);
             r << 1.0, 0.0,
                  0.0, 1.0;
             return r;
@@ -68,7 +68,7 @@ namespace model0
         res(0) *= .5 * dt;
         return res;
     }
-    Eigen::MatrixXd C(const double dt)
+    Eigen::MatrixXd C(const double t)
     {
         return Eigen::MatrixXd::Identity(2, 2);
     }
@@ -98,10 +98,10 @@ namespace model0
 namespace model2
 {
     const double L_phi = 1, L_p = 1, L_delta = 1, g = 9.80665;
-    Eigen::Matrix2d Q(double t = 0.0) 
+    Eigen::MatrixXd Q(double t = 0.0) 
     {
-        static const Eigen::Matrix2d Q_const = []() {
-            Eigen::Matrix2d q;
+        static const Eigen::MatrixXd Q_const = []() {
+            Eigen::MatrixXd q(2, 2);
             q << 0.05, 0.01,   // Angle and angular velocity process noise
                  0.01, 0.1;    // (with some correlation)
             return q;
@@ -109,10 +109,10 @@ namespace model2
         return Q_const;
     }
     
-    Eigen::Matrix2d R(double t = 0.0) 
+    Eigen::MatrixXd R(double t = 0.0) 
     {
-        static const Eigen::Matrix2d R_const = []() {
-            Eigen::Matrix2d r;
+        static const Eigen::MatrixXd R_const = []() {
+            Eigen::MatrixXd r(2, 2);
             r << 0.5, 0.0,
                  0.0, 0.5;
             return r;
@@ -129,11 +129,12 @@ namespace model2
     }
     Eigen::MatrixXd B(const double dt)
     {
-        Eigen::VectorXd res = Eigen::VectorXd::Zero(2);
-        res(1) = L_delta * dt;
+        Eigen::VectorXd res(2);
+        res(0) = 0;
+        res(1) = 1;
         return res;
     }
-    Eigen::MatrixXd C(const double dt)
+    Eigen::MatrixXd C(const double t)
     {
         Eigen::MatrixXd res = Eigen::MatrixXd::Zero(2, 2);
         res(0, 1) = 1;
@@ -142,9 +143,8 @@ namespace model2
     }
     Eigen::MatrixXd D(const double dt)
     {
-        Eigen::VectorXd res(2);
-        res(0) = 0;
-        res(1) = 1;
+        Eigen::VectorXd res = Eigen::VectorXd::Zero(2);
+        res(1) = L_delta * dt;
         return res;
     }
     Eigen::VectorXd u(const double t)
