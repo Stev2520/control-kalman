@@ -143,8 +143,8 @@ namespace model2
     Eigen::MatrixXd D(const double dt)
     {
         Eigen::VectorXd res(2);
-        res(0) = res(1) = dt;
-        res(0) *= .5 * dt;
+        res(0) = 0;
+        res(1) = 1;
         return res;
     }
     Eigen::VectorXd u(const double t)
