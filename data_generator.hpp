@@ -12,12 +12,19 @@
 #include "time_generator.hpp"
 
 namespace data_generator {
-
+// ============================================================================
+// 1. КОНФИГУРАЦИЯ И ДАННЫЕ
+// ============================================================================
     enum class DataFormat {
         BINARY,      // Бинарный формат для скорости
         TEXT_CSV,    // Текстовый CSV для удобства
         TEXT_MATLAB, // Текстовый формат MATLAB
         TEXT_TXT     // Простой TXT формат
+    };
+
+    enum class ModelType {
+        MODEL0,  // Модель рыскания самолета
+        MODEL2   // Модель крена самолета
     };
 
     struct SimulationConfig {
@@ -70,6 +77,7 @@ namespace data_generator {
             data.times = time_gen_.generate(config_.total_steps,
                                             config_.base_dt,
                                             config_.time_mode);
+            time_gen_.saveToFile(data.times, config_.output_dir + "/timegrid");
 
             // Инициализация фильтров
             model2::reset_noise();
@@ -568,5 +576,6 @@ namespace data_generator {
     };
 
 } // namespace data_generator
+
 
 #endif // DATA_GENERATOR_HPP
