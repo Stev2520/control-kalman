@@ -1,61 +1,229 @@
+#include <iostream>
 #include "kalman.hpp"
+
 using namespace kalman;
-SRCF::SRCF(const size_t nx) : x_(Eigen::VectorXd::Zero(nx)), S_(Eigen::MatrixXd::Identity(nx, nx)) { }
-SRCF::SRCF(const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0) : x_(x0), S_(Eigen::LLT<Eigen::MatrixXd>(P0).matrixL()) { }
-void SRCF::initialize(const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0)
+
+SRCF::SRCF(const size_t nx) : x_(Eigen::VectorXd::Zero(nx)),
+                              S_(Eigen::MatrixXd::Identity(nx, nx)) { }
+
+SRCF::SRCF(const Eigen::VectorXd &x0,
+           const Eigen::MatrixXd &P0) : x_(x0),
+                                        S_(Eigen::LLT<Eigen::MatrixXd>(P0).matrixL()) { }
+
+void SRCF::initialize(const Eigen::VectorXd &x0,
+                      const Eigen::MatrixXd &P0)
 {
     x_ = x0;
     S_ = P0.llt().matrixL();
 }
-void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &C, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::MatrixXd &R, const Eigen::VectorXd &u, const Eigen::VectorXd &y)
+
+void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
+                const Eigen::MatrixXd &C, const Eigen::MatrixXd &D,
+                const Eigen::MatrixXd &Q, const Eigen::MatrixXd &R,
+                const Eigen::VectorXd &u, const Eigen::VectorXd &y)
 {
-    const size_t nx = x_.size(), ny = y.size(), nw = B.cols(), nu = u.size();
-    assert(
-        A.rows() == nx && A.cols() == nx &&
-        B.rows() == nx && B.cols() == nw &&
-        C.rows() == ny && C.cols() == nx &&
-        D.rows() == nx && D.cols() == nu &&
-        Q.rows() == nw && Q.cols() == nw &&
-        R.rows() == ny && R.cols() == ny
-    );
-    Eigen::MatrixXd pre = Eigen::MatrixXd::Zero(nx + ny, nx + ny + nw);
-    pre.block(0, 0, ny, ny) = R.llt().matrixL();
-    pre.block(0, ny, ny, nx) = C * S_;
-    pre.block(ny, ny, nx, nx) = A * S_;
-    pre.block(ny, nx + ny, nx, nw) = B * Q.llt().matrixL();
-    const Eigen::MatrixXd post = Eigen::HouseholderQR<Eigen::MatrixXd>(pre.transpose()).matrixQR().topRows(nx + ny).triangularView<Eigen::Upper>().transpose();
-    x_ = A * x_ + post.block(ny, 0, nx, ny) * post.block(0, 0, ny, ny).inverse() * (y - C * x_) + D * u;
-    S_ = post.block(ny, ny, nx, nx);
-}
-/*void SRCF::predict(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::VectorXd &u)
-{
-        const int nx = x_.size(), nw = B.cols();
-        assert(
-            A.rows() == nx && A.cols() == nx &&
-            B.rows() == nx && B.cols() == nw &&
-            Q.rows() == nw && Q.cols() == nw
-        );
-        // Build compound matrix for QR decomposition
-        Eigen::MatrixXd compound(nx + nw, nx);
-        compound.setZero();
-        compound.block(0, 0, nx, nx) = A * S_;
-        compound.block(nx, 0, nw, nx) = Eigen::LLT<Eigen::MatrixXd>(Q).matrixL().transpose(); // For orthogonality
-        S_ = Eigen::HouseholderQR<Eigen::MatrixXd>(compound).matrixQR().triangularView<Eigen::Upper>().block(0, 0, nx, nx);
+    const size_t nx = x_.size();
+    const size_t ny = y.size();
+    const size_t nw = B.cols();
+    const size_t nu = u.size();
+
+    if (!A.allFinite() || !B.allFinite() || !C.allFinite() ||
+        !Q.allFinite() || !R.allFinite() || !u.allFinite() || !y.allFinite()) {
+        std::cerr << "ERROR: Input matrices contain NaN/Inf!" << std::endl;
+        std::cerr << "A finite: " << A.allFinite()
+                  << ", B finite: " << B.allFinite()
+                  << ", C finite: " << C.allFinite()
+                  << ", Q finite: " << Q.allFinite()
+                  << ", R finite: " << R.allFinite()
+                  << ", u finite: " << u.allFinite()
+                  << ", y finite: " << y.allFinite() << std::endl;
+        return;
+    }
+
+    if (!(A.rows() == nx && A.cols() == nx &&
+          B.rows() == nx && B.cols() == nw &&
+          C.rows() == ny && C.cols() == nx &&
+          D.rows() == nx && D.cols() == nu &&
+          Q.rows() == nw && Q.cols() == nw &&
+          R.rows() == ny && R.cols() == ny)) {
+        std::cerr << "ERROR: Dimension mismatch!" << std::endl;
+        std::cerr << "A: " << A.rows() << "x" << A.cols() << " (expected " << nx << "x" << nx << ")\n";
+        std::cerr << "B: " << B.rows() << "x" << B.cols() << " (expected " << nx << "x" << nw << ")\n";
+        std::cerr << "C: " << C.rows() << "x" << C.cols() << " (expected " << ny << "x" << nx << ")\n";
+        std::cerr << "D: " << D.rows() << "x" << D.cols() << " (expected " << nx << "x" << nu << ")\n";
+        std::cerr << "Q: " << Q.rows() << "x" << Q.cols() << " (expected " << nw << "x" << nw << ")\n";
+        std::cerr << "R: " << R.rows() << "x" << R.cols() << " (expected " << ny << "x" << ny << ")\n";
+        return;
+    }
+
+    // 1. Квадратные корни
+    Eigen::MatrixXd SQ, SR;
+    Eigen::LLT<Eigen::MatrixXd> lltQ(Q);
+    if (lltQ.info() != Eigen::Success) {
+        std::cerr << "WARNING: Q is not positive definite! Adding regularization." << std::endl;
+        Eigen::MatrixXd Q_reg = Q + Eigen::MatrixXd::Identity(Q.rows(), Q.cols()) * 1e-8;
+        SQ = Q_reg.llt().matrixL();
+    } else {
+//        SQ = lltQ.matrixL();
+        SQ = Q.llt().matrixL();
+    }
+
+    Eigen::LLT<Eigen::MatrixXd> lltR(R);
+    if (lltR.info() != Eigen::Success) {
+        std::cerr << "WARNING: R is not positive definite! Adding regularization." << std::endl;
+        Eigen::MatrixXd R_reg = R + Eigen::MatrixXd::Identity(R.rows(), R.cols()) * 1e-8;
+        SR = R_reg.llt().matrixL();
+    } else {
+//        SR = lltR.matrixL();
+        SR = R.llt().matrixL();
+    }
+
+    if (!S_.allFinite()) {
+        std::cout << "WARNING: S_ contains NaN/Inf, resetting to identity" << std::endl;
+        S_ = Eigen::MatrixXd::Identity(nx, nx) * 0.1;
+    }
+
+    // 2. Формирование пре-массива
+    Eigen::MatrixXd prearray = Eigen::MatrixXd::Zero(nx + ny, nx + ny + nw);
+
+    try {
+        // Верхний блок: [SR, C*S, 0]
+        prearray.block(0, 0, ny, ny) = SR;
+        prearray.block(0, ny, ny, nx) = C * S_;
+
+        // Нижний блок: [0, A*S, B*SQ]
+        prearray.block(ny, ny, nx, nx) = A * S_;
+        prearray.block(ny, nx + ny, nx, nw) = B * SQ;
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR forming prearray: " << e.what() << std::endl;
+        return;
+    }
+
+    if (!prearray.allFinite()) {
+        std::cout << "ERROR: M contains NaN/Inf!" << std::endl;
+        std::cout << "SR norm: " << SR.norm() << std::endl;
+        std::cout << "C*S_ norm: " << (C*S_).norm() << std::endl;
+        std::cout << "A*S_ norm: " << (A*S_).norm() << std::endl;
+        std::cout << "B*SQ norm: " << (B*SQ).norm() << std::endl;
+        return;
+    }
+
+    // 3. QR разложение
+    Eigen::MatrixXd R_mat;
+    try {
+        Eigen::HouseholderQR<Eigen::MatrixXd> qr(prearray.transpose());
+        R_mat = qr.matrixQR().template triangularView<Eigen::Upper>();
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR in QR decomposition: " << e.what() << std::endl;
+        return;
+    }
+
+    if (!R_mat.allFinite()) {
+        std::cerr << "ERROR: R_mat contains NaN/Inf after QR!" << std::endl;
+        return;
+    }
+
+    // Берем первые (p+n) строк
+    if (R_mat.rows() < ny + nx || R_mat.cols() < ny + nx) {
+        std::cerr << "ERROR: R_mat too small: " << R_mat.rows() << "x" << R_mat.cols()
+                  << " (need at least " << ny + nx << "x" << ny + nx << ")" << std::endl;
+        return;
+    }
+
+    Eigen::MatrixXd postarray;
+    // Берем нужный блок: первые (nx+ny) строк и столбцов
+    try {
+        Eigen::MatrixXd R_top = R_mat.topLeftCorner(nx + ny, nx + ny);
+        postarray = R_top.transpose();
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR extracting postarray: " << e.what() << std::endl;
+        return;
+    }
+
+    if (!postarray.allFinite()) {
+        std::cout << "ERROR: postarray contains NaN/Inf!" << std::endl;
+        return;
+    }
+
+    if (postarray.rows() < ny + nx || postarray.cols() < ny + nx) {
+        std::cout << "ERROR: postarray too small: "
+                  << postarray.rows() << "x" << postarray.cols()
+                  << ", expected at least " << ny + nx << "x" << ny + nx << std::endl;
+        return;
+    }
+
+    // 4. Извлекаем блоки
+    // post = [S_Re    0]
+    //        [G      S_next]
+    Eigen::MatrixXd S_Re, G, S_next;
+    try {
+        S_Re = postarray.block(0, 0, ny, ny);
+        G = postarray.block(ny, 0, nx, ny);
+        S_next = postarray.block(ny, ny, nx, nx);
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR extracting blocks: " << e.what() << std::endl;
+        return;
+    }
+
+    if (!S_next.allFinite()) {
+        std::cerr << "WARNING: S_next contains NaN/Inf, using fallback" << std::endl;
+        // Простой прогноз как запасной вариант
         x_ = A * x_ + D * u;
+        S_ = (A * S_ * S_.transpose() * A.transpose() + B * Q * B.transpose())
+                .llt().matrixL();
+        return;
+    }
+
+    // 5. Обновление состояния (численно устойчивое)
+    Eigen::VectorXd innov = y - C * x_;
+
+    // Проверка обусловленности S_Re
+    if (S_Re.diagonal().cwiseAbs().minCoeff() < 1e-12) {
+        std::cerr << "WARNING: S_Re has very small diagonal elements, adding regularization" << std::endl;
+        S_Re.diagonal().array() += 1e-8;
+    }
+
+    // Решаем S_Re * z = innov (S_Re - нижнетреугольная)
+    Eigen::VectorXd z;
+    try {
+        z = S_Re.triangularView<Eigen::Lower>().solve(innov);
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR solving triangular system: " << e.what() << std::endl;
+        // Запасной вариант: простой прогноз
+        x_ = A * x_ + D * u;
+        return;
+    }
+
+    // 6. Обновляем состояние и ковариацию
+    if (!z.allFinite()) {
+        std::cerr << "WARNING: z contains NaN/Inf, using zero update" << std::endl;
+        x_ = A * x_ + D * u;
+    } else {
+        // Ограничение слишком больших обновлений
+        double z_norm = z.norm();
+//        if (z_norm > 100.0) {
+//            std::cerr << "WARNING: Large update (z_norm = " << z_norm << "), limiting" << std::endl;
+////            z = z / z_norm * 100.0;
+//        }
+
+        try {
+            x_ = A * x_ + G * z + D * u;
+        } catch (const std::exception& e) {
+            std::cerr << "ERROR updating state: " << e.what() << std::endl;
+            x_ = A * x_ + D * u;  // Запасной вариант
+        }
+    }
+    S_ = S_next;
+    // Дополнительная проверка: гарантируем нижнетреугольность
+    S_ = S_.triangularView<Eigen::Lower>();
+
+    // Проверка положительной определенности
+    Eigen::MatrixXd P_test = S_ * S_.transpose();
+    Eigen::LLT<Eigen::MatrixXd> llt_test(P_test);
+    if (llt_test.info() != Eigen::Success) {
+        std::cerr << "WARNING: P not positive definite after update, regularizing" << std::endl;
+        // Регуляризация
+        P_test += Eigen::MatrixXd::Identity(nx, nx) * 1e-8;
+        S_ = P_test.llt().matrixL();
+    }
 }
-void SRCF::update(const Eigen::MatrixXd &C, const Eigen::MatrixXd &R, const Eigen::VectorXd& y) 
-{
-    const int nx = x_.size(), ny = y.size();
-    assert(
-        C.rows() == ny && C.cols() == nx &&
-        R.rows() == ny && R.cols() == ny
-    );
-    Eigen::MatrixXd SR = Eigen::LLT<Eigen::MatrixXd>(R).matrixL(), compound(ny + nx, nx + ny);
-    compound.setZero();
-    compound.block(0, 0, ny, nx) = C * S_;
-    compound.block(0, nx, ny, ny) = SR;
-    compound.block(ny, 0, nx, nx) = S_;
-    Eigen::MatrixXd R_mat = Eigen::HouseholderQR<Eigen::MatrixXd>(compound).matrixQR().triangularView<Eigen::Upper>();
-    S_ = R_mat.block(ny, 0, nx, nx);
-    x_ += R_mat.block(0, 0, ny, nx).transpose() * R_mat.block(0, nx, ny, ny).inverse().transpose() * (y - C * x_);
-}*/
