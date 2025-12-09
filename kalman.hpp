@@ -12,8 +12,8 @@ public:
     void step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &C, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::MatrixXd &R, const Eigen::VectorXd &u, const Eigen::VectorXd &y);
     //void predict(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::VectorXd &u);
     //void update(const Eigen::MatrixXd &C, const Eigen::MatrixXd &R, const Eigen::VectorXd &y);
-    const Eigen::VectorXd& state() const { return x_; }
-    const Eigen::MatrixXd& covariance() const { return P_; }
+    const Eigen::VectorXd state() const { return x_; }
+    const Eigen::MatrixXd covariance() const { return P_; }
 private:
     Eigen::VectorXd x_;
     Eigen::MatrixXd P_;
@@ -27,9 +27,9 @@ public:
     void step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &C, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::MatrixXd &R, const Eigen::VectorXd &u, const Eigen::VectorXd &y);
     //void predict(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::VectorXd &u);
     //void update(const Eigen::MatrixXd &C, const Eigen::MatrixXd &R, const Eigen::VectorXd &y);
-    const Eigen::VectorXd& state() const { return x_; }
-    const Eigen::MatrixXd& covariance() const { return S_ * S_.transpose(); }
-    const Eigen::MatrixXd& covarianceSqrt() const { return S_; }
+    const Eigen::VectorXd state() const { return x_; }
+    const Eigen::MatrixXd covariance() const { return S_ * S_.transpose(); }
+    const Eigen::MatrixXd covarianceSqrt() const { return S_; }
 private:
     Eigen::VectorXd x_;
     Eigen::MatrixXd S_;
@@ -42,7 +42,7 @@ public:
     void step(const Eigen::VectorXd &u, const Eigen::VectorXd &y);
     //void predict(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::VectorXd &u);
     //void update(const Eigen::MatrixXd &C, const Eigen::MatrixXd &R, const Eigen::VectorXd &y);
-    const Eigen::VectorXd& state() const { return x_; }
+    const Eigen::VectorXd state() const { return x_; }
     //const Eigen::MatrixXd& covariance() const { return ; }
 private:
     void applySigmaUnitary(Eigen::MatrixXd &prearray);
@@ -58,8 +58,8 @@ public:
     void step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &C, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::MatrixXd &R, const Eigen::VectorXd &u, const Eigen::VectorXd &y);
     //void predict(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::VectorXd &u);
     //void update(const Eigen::MatrixXd &C, const Eigen::MatrixXd &R, const Eigen::VectorXd &y);
-    const Eigen::VectorXd& state() const { return x_; }
-    const Eigen::MatrixXd& covariance() const { return (T_.transpose() * T_).inverse(); }
+    const Eigen::VectorXd state() const { return x_; }
+    const Eigen::MatrixXd covariance() const { return (T_.transpose() * T_).inverse(); }
 private:
     Eigen::VectorXd x_;
     Eigen::MatrixXd T_;
