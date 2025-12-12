@@ -22,10 +22,12 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
                 const Eigen::MatrixXd &Q, const Eigen::MatrixXd &R,
                 const Eigen::VectorXd &u, const Eigen::VectorXd &y)
 {
+    std::cout << "\n=== Manual SRCF Step ===\n";
     const size_t nx = x_.size();
     const size_t ny = y.size();
     const size_t nw = B.cols();
     const size_t nu = u.size();
+    std::cout << "nx=" << nx << ", ny=" << ny << ", nw=" << nw  << ", nu=" << nu << "\n";
 
     if (!A.allFinite() || !B.allFinite() || !C.allFinite() ||
         !Q.allFinite() || !R.allFinite() || !u.allFinite() || !y.allFinite()) {
@@ -57,6 +59,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     }
 
     // 1. Квадратные корни
+    std::cout << "\n1. Cholesky decompositions:\n";
     Eigen::MatrixXd SQ, SR;
     Eigen::LLT<Eigen::MatrixXd> lltQ(Q);
     if (lltQ.info() != Eigen::Success) {
@@ -77,6 +80,8 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
 //        SR = lltR.matrixL();
         SR = R.llt().matrixL();
     }
+    std::cout << "SQ (" << SQ.rows() << "x" << SQ.cols() << "): " << SQ << "\n";
+    std::cout << "SR (" << SR.rows() << "x" << SR.cols() << "): " << SR << "\n";
 
     if (!S_.allFinite()) {
         std::cout << "WARNING: S_ contains NaN/Inf, resetting to identity" << std::endl;
@@ -84,20 +89,32 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     }
 
     // 2. Формирование пре-массива
+    std::cout << "\n2. Computing prearray blocks:\n";
+    Eigen::MatrixXd C_times_S = C * S_;
+    Eigen::MatrixXd A_times_S = A * S_;
+    Eigen::MatrixXd B_times_SQ = B * SQ;
+
+    std::cout << "C*S (" << C_times_S.rows() << "x" << C_times_S.cols() << "):\n" << C_times_S << "\n";
+    std::cout << "A*S (" << A_times_S.rows() << "x" << A_times_S.cols() << "):\n" << A_times_S << "\n";
+    std::cout << "B*SQ (" << B_times_SQ.rows() << "x" << B_times_SQ.cols() << "):\n" << B_times_SQ << "\n";
+
+    std::cout << "\n3. Building prearray (" << (nx + ny) << "x" << (nx + ny + nw) << "):\n";
     Eigen::MatrixXd prearray = Eigen::MatrixXd::Zero(nx + ny, nx + ny + nw);
 
     try {
         // Верхний блок: [SR, C*S, 0]
         prearray.block(0, 0, ny, ny) = SR;
-        prearray.block(0, ny, ny, nx) = C * S_;
+        prearray.block(0, ny, ny, nx) = C_times_S;
 
         // Нижний блок: [0, A*S, B*SQ]
-        prearray.block(ny, ny, nx, nx) = A * S_;
-        prearray.block(ny, nx + ny, nx, nw) = B * SQ;
+        prearray.block(ny, ny, nx, nx) = A_times_S;
+        prearray.block(ny, nx + ny, nx, nw) = B_times_SQ;
     } catch (const std::exception& e) {
         std::cerr << "ERROR forming prearray: " << e.what() << std::endl;
         return;
     }
+
+    std::cout << "Prearray:\n" << prearray << "\n";
 
     if (!prearray.allFinite()) {
         std::cout << "ERROR: M contains NaN/Inf!" << std::endl;
@@ -109,10 +126,12 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     }
 
     // 3. QR разложение
+    std::cout << "\n4. QR decomposition:\n";
     Eigen::MatrixXd R_mat;
     try {
         Eigen::HouseholderQR<Eigen::MatrixXd> qr(prearray.transpose());
         R_mat = qr.matrixQR().template triangularView<Eigen::Upper>();
+        std::cout << "R_mat (" << R_mat.rows() << "x" << R_mat.cols() << "):\n" << R_mat << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR in QR decomposition: " << e.what() << std::endl;
         return;
@@ -135,6 +154,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     try {
         Eigen::MatrixXd R_top = R_mat.topLeftCorner(nx + ny, nx + ny);
         postarray = R_top.transpose();
+        std::cout << "\n5. Postarray (" << postarray.rows() << "x" << postarray.cols() << "):\n" << postarray << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR extracting postarray: " << e.what() << std::endl;
         return;
@@ -155,11 +175,15 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     // 4. Извлекаем блоки
     // post = [S_Re    0]
     //        [G      S_next]
+    std::cout << "\n6. Extracting blocks:\n";
     Eigen::MatrixXd S_Re, G, S_next;
     try {
         S_Re = postarray.block(0, 0, ny, ny);
         G = postarray.block(ny, 0, nx, ny);
         S_next = postarray.block(ny, ny, nx, nx);
+        std::cout << "S_Re (" << S_Re.rows() << "x" << S_Re.cols() << "): " << S_Re << "\n";
+        std::cout << "G (" << G.rows() << "x" << G.cols() << "):\n" << G << "\n";
+        std::cout << "S_next (" << S_next.rows() << "x" << S_next.cols() << "):\n" << S_next << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR extracting blocks: " << e.what() << std::endl;
         return;
@@ -175,7 +199,9 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     }
 
     // 5. Обновление состояния (численно устойчивое)
+    std::cout << "\n7. State update:\n";
     Eigen::VectorXd innov = y - C * x_;
+    std::cout << "Innovation: " << innov.transpose() << "\n";
 
     // Проверка обусловленности S_Re
     if (S_Re.diagonal().cwiseAbs().minCoeff() < 1e-12) {
@@ -187,6 +213,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     Eigen::VectorXd z;
     try {
         z = S_Re.triangularView<Eigen::Lower>().solve(innov);
+        std::cout << "z = S_Re\\innov: " << z.transpose() << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR solving triangular system: " << e.what() << std::endl;
         // Запасной вариант: простой прогноз
@@ -195,6 +222,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     }
 
     // 6. Обновляем состояние и ковариацию
+    Eigen::VectorXd x_old = x_;
     if (!z.allFinite()) {
         std::cerr << "WARNING: z contains NaN/Inf, using zero update" << std::endl;
         x_ = A * x_ + D * u;
@@ -205,9 +233,13 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
 //            std::cerr << "WARNING: Large update in SRCF (z_norm = " << z_norm << "), limiting" << std::endl;
 ////            z = z / z_norm * 100.0;
 //        }
-
         try {
+            std::cout << "x_new = A*x + G*z + D*u:\n";
+            std::cout << "  A*x = " << (A * x_).transpose() << "\n";
+            std::cout << "  G*z = " << (G * z).transpose() << "\n";
+            std::cout << "  D*u = " << (D * u).transpose() << "\n";
             x_ = A * x_ + G * z + D * u;
+            std::cout << "  x_new = " << x_.transpose() << "\n";
         } catch (const std::exception& e) {
             std::cerr << "ERROR updating state: " << e.what() << std::endl;
             x_ = A * x_ + D * u;
@@ -226,4 +258,9 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         P_test += Eigen::MatrixXd::Identity(nx, nx) * 1e-8;
         S_ = P_test.llt().matrixL();
     }
+
+    std::cout << "\n=== Summary ===\n";
+    std::cout << "Old state: " << x_old.transpose() << "\n";
+    std::cout << "New state: " << x_.transpose() << "\n";
+    std::cout << "True state: " << (A * Eigen::Vector2d(0,0) + B * u).transpose() << "\n";
 }
