@@ -132,9 +132,9 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     if (!prearray.allFinite()) {
         std::cout << "ERROR: M contains NaN/Inf!" << std::endl;
         std::cout << "SR norm: " << SR.norm() << std::endl;
-        std::cout << "C*S_ norm: " << (C*S_).norm() << std::endl;
-        std::cout << "A*S_ norm: " << (A*S_).norm() << std::endl;
-        std::cout << "B*SQ norm: " << (B*SQ).norm() << std::endl;
+        std::cout << "C*S_ norm: " << (C * S_).norm() << std::endl;
+        std::cout << "A*S_ norm: " << (A * S_).norm() << std::endl;
+        std::cout << "B*SQ norm: " << (B * SQ).norm() << std::endl;
         return;
     }
 
@@ -192,13 +192,13 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         return;
     }
 
-    for (int i = 0; i < ny; ++i) {
+    for (size_t i = 0; i < ny; ++i) {
         if (postarray(i, i) < 0) {
             postarray.row(i) = -postarray.row(i);
         }
     }
 
-    for (int i = 0; i < nx; ++i) {
+    for (size_t i = 0; i < nx; ++i) {
         int row_idx = ny + i;
         if (postarray(row_idx, row_idx) < 0) {
             postarray.row(row_idx) = -postarray.row(row_idx);

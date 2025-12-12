@@ -102,18 +102,31 @@ namespace data_generator {
     private:
         SimulationConfig config_;
         time_generator::TimeGenerator time_gen_;
+        std::ofstream log_file_;
+
+        void validateConfig() {
+            if (config_.total_steps == 0) {
+                throw std::invalid_argument("total_steps must be > 0");
+            }
+            if (config_.base_dt <= 0) {
+                throw std::invalid_argument("base_dt must be > 0");
+            }
+        }
+
+        void log(const std::string& message) {
+            if (!log_file_.is_open()) {
+                log_file_.open(config_.output_dir + "/simulation.log");
+            }
+            log_file_ << message << std::endl;
+        }
 
     public:
         DataGenerator(const SimulationConfig& config, int seed = 42)
                 : config_(config), time_gen_(seed)
         {
+            validateConfig();
             std::string command;
-#ifdef _WIN32
-            command = "mkdir \"" + config_.output_dir + "\" 2>nul";
-#else
-            command = "mkdir -p \"" + config_.output_dir + "\"";
-#endif
-            system(command.c_str());
+            std::filesystem::create_directories(config_.output_dir);
         }
 
         SimulationData generate() {
@@ -194,20 +207,13 @@ namespace data_generator {
                 Eigen::VectorXd u = model0::u(t, config_.scenario.scenario0);
 
                 // Динамика системы
-//                x_true = model0::true_dynamics(x_true, t, dt,
-//                                               config_.scenario.scenario0,
-//                                               config_.add_process_noise);
-                // Шумы
-                // Генератор данных // Шумы
-                Eigen::VectorXd w;
-                if (config_.add_process_noise) {
-                    w = model0::w(t, dt, true) * config_.process_noise_scale;
-                } else {
-                    w = Eigen::Vector2d::Zero();
-                }
-
-                // Динамика системы
-                x_true = A * x_true + B * u + w;
+                x_true = model0::true_dynamics(
+                        x_true,
+                        t,
+                        dt,
+                        config_.scenario.scenario0,
+                        config_.add_process_noise
+                );
 
                 // Измерения
                 Eigen::Vector2d y_exact = C * x_true;
@@ -271,21 +277,13 @@ namespace data_generator {
                 Eigen::VectorXd u = model2::u(t, config_.scenario.scenario2);
 
                 // Динамика системы
-//                x_true = model2::true_dynamics(x_true, t, dt,
-//                                               config_.scenario.scenario2,
-//                                               config_.add_process_noise);
-
-                // Шумы
-                // Генератор данных // Шумы
-                Eigen::VectorXd w;
-                if (config_.add_process_noise) {
-                    w = model2::w(t, dt, true) * config_.process_noise_scale;
-                } else {
-                    w = Eigen::Vector2d::Zero();
-                }
-
-                // Динамика системы
-                x_true = A * x_true + B * u + w;
+                x_true = model2::true_dynamics(
+                        x_true,
+                        t,
+                        dt,
+                        config_.scenario.scenario2,
+                        config_.add_process_noise
+                );
 
                 // Измерения
                 Eigen::Vector2d y_exact = C * x_true;
@@ -334,10 +332,13 @@ namespace data_generator {
                                       const std::vector<Eigen::Vector2d>& estimates,
                                       const std::vector<Eigen::Matrix2d>& covariances,
                                       const std::vector<double>& times,
-                                      SimulationData::FilterMetrics& metrics) {
+                                      SimulationData::FilterMetrics& metrics)
+        {
             double sum_sq_error = 0.0;
             double sum_cov_norm = 0.0;
             double sum_cond = 0.0;
+            int valid_cond_count = 0;  // Счетчик корректно вычисленных cond
+
             metrics.max_error = 0.0;
             metrics.error_history.clear();
             metrics.error_history.reserve(true_states.size());
@@ -355,11 +356,24 @@ namespace data_generator {
                 // Норма ковариации
                 sum_cov_norm += covariances[i].norm();
 
-                // Число обусловленности
+                // БЕЗОПАСНОЕ вычисление числа обусловленности
                 Eigen::JacobiSVD<Eigen::Matrix2d> svd(covariances[i]);
-                double cond = svd.singularValues()(0) /
-                              svd.singularValues()(svd.singularValues().size()-1);
-                sum_cond += cond;
+                Eigen::Vector2d singular_values = svd.singularValues();
+
+                // Проверяем, что матрица не вырождена
+                double min_sv = singular_values.minCoeff();
+                double max_sv = singular_values.maxCoeff();
+
+                if (min_sv > 1e-10 && max_sv > 1e-10) {
+                    double cond = max_sv / min_sv;
+
+                    // Ограничиваем cond разумным значением
+                    if (cond < 1e15) {  // Избегаем бесконечности
+                        sum_cond += cond;
+                        valid_cond_count++;
+                    }
+                }
+                // Если min_sv слишком мал, просто пропускаем этот шаг
 
                 // Определяем время сходимости
                 if (i > 100 && error < 0.01 && metrics.convergence_time == 0.0) {
@@ -373,7 +387,10 @@ namespace data_generator {
 
             metrics.rms_error = std::sqrt(sum_sq_error / metrics.error_history.size());
             metrics.cov_norm = sum_cov_norm / covariances.size();
-            metrics.cond_number = sum_cond / covariances.size();
+
+            // Усредняем только по корректным вычислениям
+            metrics.cond_number = (valid_cond_count > 0) ?
+                                  sum_cond / valid_cond_count : 1.0;
         }
 
         void calculate_comparison_metrics(SimulationData& data) {

@@ -1,60 +1,161 @@
-.vs
-.vs/*
-.vscode
-.vscode/*
-bin
-bin/*
-obj
-obj/*
-.idea
+# ============================================
+# ИДЕ и редакторы
+# ============================================
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*_Resharper.*
+*.ncrunch*
+*.ncrunchsolution
+*.crunchsolution.local
+
+# JetBrains Rider / IntelliJ IDEA
 .idea/
-.idea/*
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
 
+# Visual Studio Code (дополнительно)
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ============================================
+# Сборка проекта
+# ============================================
+
+# Автогенерируемые директории сборки
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.[Pp]ublish.xml
+
+# CMake
+[Cc]make-*/
+[Cc]makeCache.txt
+[Cc]makeFiles/
+cmake_install.cmake
 cmake-build-debug/
+install_manifest.txt
+compile_commands.json
+Makefile
+
+# Vcpkg
 vcpkg/
+vcpkg_installed/
+vcpkg-packagelist-*.txt
 
-# Prerequisites
-*.d
+# ============================================
+# Временные и системные файлы
+# ============================================
 
-# Object files
+# Резервные копии и временные файлы
+*~
+*.bak
+*.tmp
+*.temp
+*.log
+*.tlog
+*.pid
+*.seed
+*.pid.lock
+
+# Системные файлы
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+[Tt]humbs.db
+desktop.ini
+*:Zone.Identifier
+*.lnk
+
+# ============================================
+# Зависимости и пакеты
+# ============================================
+
+# Пакеты
+packages/
+**/[Pp]ackages/*
+
+# npm / Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.coverage
+*.egg-info/
+.installed.cfg
+*.egg
+dist/
+build/
+
+# ============================================
+# Файлы вывода компилятора
+# ============================================
+
+# Объектные файлы
 *.o
 *.ko
 *.obj
 *.elf
 
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
+# Предкомпилированные заголовки
 *.gch
 *.pch
 
-# Libraries
+# Библиотеки
 *.lib
 *.a
 *.la
 *.lo
-
-# Shared objects (inc. Windows DLLs)
 *.dll
 *.so
 *.so.*
 *.dylib
 
-# Executables
+# Исполняемые файлы
 *.exe
 *.app
+*.out
+*.com
+*.bin
+*.hex
 *.i*86
 *.x86_64
-*.hex
 
-# Debug files
+# Отладочная информация
 *.dSYM/
-*.su
 *.idb
 *.pdb
+*.dbg
+*.ilk
+*.map
+*.exp
 
 # Kernel Module Compile Results
 *.mod*
@@ -65,8 +166,59 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-*:Zone.Identifier
+# ============================================
+# Специфичные для языков
+# ============================================
+
+# C# / .NET
+*.userprefs
+*.csproj.user
+*.unityproj.user
+
+# Java
+*.class
+*.war
+*.ear
+hs_err_pid*
+
+# Go
+vendor/
+
+# Rust
+/target/
+**/*.rs.bk
+
+# ============================================
+# Настройки пользователей и среды
+# ============================================
+
+# Файлы конфигурации окружения
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Jupyter
 *.ipynb_checkpoints/
-.DS_Store
-__pycache__/
-*.pyc
+.ipynb_checkpoints/
+
+# ============================================
+# Другое
+# ============================================
+
+# Резервные копии систем контроля версий
+.svn/
+.git/
+.gitattributes
+.gitkeep
+.gitmodules
+
+# Тестовые отчеты
+TestResult.xml
+test-results/
+
+# Файлы профилей производительности
+*.profdata
+*.gcda
+*.gcno

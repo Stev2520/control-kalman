@@ -1,8 +1,12 @@
+#ifndef MODELS_HPP
+#define MODELS_HPP
+
 #pragma once
 #include <Eigen/Dense>
 #include <random>
 #include <functional>
 #include <cmath>
+
 namespace kalman_noise
 {
     class NoiseGenerator
@@ -33,7 +37,7 @@ namespace kalman_noise
     };
 
     static NoiseGenerator noise_gen;
-}
+} // namespace kalman_noise
 
 // ============================================================================
 // МОДЕЛЬ 0: Упрощенная модель рыскания самолета (yaw model)
@@ -86,7 +90,7 @@ namespace model0
     // Матрица управления (дискретная)
     Eigen::MatrixXd B(double dt)
     {
-        Eigen::VectorXd psi = Eigen::VectorXd::Zero(2);
+        Eigen::MatrixXd psi(2, 1);
         psi(0) = psi(1) = b * dt;
         psi(0) *= 0.5 * dt;
         return psi;
@@ -99,12 +103,12 @@ namespace model0
     }
 
     // Матрица прямого воздействия (обычно 0 для фильтра Калмана)
-    Eigen::MatrixXd D(double dt = 0.0) {
+    Eigen::MatrixXd G(double dt = 0.0) {
         return Eigen::MatrixXd::Zero(2, 1);
     }
 
     // Матрица воздействия шума процесса (дискретная)
-    Eigen::VectorXd G(double dt)
+    Eigen::VectorXd D(double dt)
     {
         Eigen::VectorXd gamma = Eigen::VectorXd::Zero(2);
         gamma(0) = gamma(1) = dt;
@@ -118,11 +122,15 @@ namespace model0
     // Ковариация шума процесса (дискретная)
     Eigen::MatrixXd Q(double dt) {
         // Q_disc = G * σ_w² * Gᵀ
-        Eigen::MatrixXd gamma = G(dt);
+        Eigen::MatrixXd gamma = D(dt);
         Eigen::MatrixXd Q_disc = gamma * gamma.transpose() * sigma_w * sigma_w;
 
         // Гарантируем положительную определенность
-        Q_disc += 1e-8 * Eigen::Matrix2d::Identity();
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Q_disc);
+        if (solver.eigenvalues().minCoeff() < 1e-12) {
+            // Добавить стабилизацию
+            Q_disc += 1e-8 * Eigen::MatrixXd::Identity(Q_disc.rows(), Q_disc.cols());
+        }
         return Q_disc;
     }
 
@@ -131,7 +139,11 @@ namespace model0
         Eigen::Matrix2d R_mat = Eigen::Matrix2d::Identity() * sigma_v * sigma_v;
 
         // Гарантируем положительную определенность
-        R_mat += 1e-8 * Eigen::Matrix2d::Identity();
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(R_mat);
+        if (solver.eigenvalues().minCoeff() < 1e-12) {
+            // Добавить стабилизацию
+            R_mat += 1e-8 * Eigen::MatrixXd::Identity(R_mat.rows(), R_mat.cols());
+        }
         return R_mat;
     }
 
@@ -192,17 +204,12 @@ namespace model0
     }
 
     // Шум процесса w_k
-    Eigen::VectorXd w(double t,
-                      double dt,
-                      bool noise = false)
-    {
+    Eigen::VectorXd w(double t, double dt, bool noise = false) {
         if (!noise) {
-            return Eigen::VectorXd::Zero(1);
+            return Eigen::VectorXd::Zero(1);  // Скалярный шум
         }
-
-        // Скалярный шум процесса
         double omega = generate_correlated_noise();
-        Eigen::VectorXd w_vec = Eigen::VectorXd::Zero(1);
+        Eigen::VectorXd w_vec(1);
         w_vec << omega;
         return w_vec;
     }
@@ -227,17 +234,17 @@ namespace model0
                                   ControlScenario scenario,
                                   bool add_noise = true)
     {
-        Eigen::Vector2d x_next = A(dt) * x + B(dt) * u(t, scenario);
+        Eigen::Vector2d x_next = A(dt) * x + D(dt) * u(t, scenario);
 
         if (add_noise) {
             Eigen::VectorXd w_noise = w(t, dt, true);
-            // Преобразуем скалярный шум в векторный через G(dt)
-            x_next += G(dt) * w_noise(0);
+            // Преобразуем скалярный шум в векторный через B(dt)
+            x_next += B(dt) * w_noise(0);
         }
 
         return x_next;
     }
-}
+} // namespace model0
 
 //// ============================================================================
 //// МОДЕЛЬ 2: Модель крена самолета (roll model)
@@ -331,17 +338,17 @@ namespace model2
     }
 
     // Непрерывная матрица B для управления для линеаризованной системы
-    Eigen::Vector2d B_continuous() {
-        Eigen::Vector2d B = Eigen::Vector2d::Zero(2);
-        B << 0, L_delta;
-        return B;
+    Eigen::Vector2d D_continuous() {
+        Eigen::Vector2d D = Eigen::Vector2d::Zero(2);
+        D << 0, L_delta;
+        return D;
     }
 
     // Непрерывная матрица G для шума процесса для линеаризованной системы
-    Eigen::Vector2d G_continuous() {
-        Eigen::Vector2d G = Eigen::Vector2d::Zero(2);
-        G << 0, 1;
-        return G;
+    Eigen::Vector2d B_continuous() {
+        Eigen::Vector2d B = Eigen::Vector2d::Zero(2);
+        B << 0, 1;
+        return B;
     }
 
     // ------------------------------------------------------------------------
@@ -355,7 +362,7 @@ namespace model2
     }
 
     // Матрица управления (дискретная)
-    Eigen::MatrixXd B(double dt) {
+    Eigen::MatrixXd D(double dt) {
         Eigen::Vector2d psi = Psi(dt);
         Eigen::MatrixXd B_mat(2, 1);
         B_mat = psi;
@@ -372,8 +379,8 @@ namespace model2
     }
 
     // Матрица прямого воздействия
-    Eigen::MatrixXd D(double dt = 0.0) {
-        return Eigen::MatrixXd::Zero(2, 1);
+    Eigen::MatrixXd B(double dt = 0.0) {
+        return Gamma(dt);
     }
 
     // ------------------------------------------------------------------------
@@ -382,19 +389,8 @@ namespace model2
 
     // Ковариация шума процесса (дискретная)
     Eigen::MatrixXd Q(double dt) {
-        // Вариант 1: Простая скалярная Q (1x1)
         Eigen::MatrixXd Q_mat(1, 1);
         Q_mat << sigma_w * sigma_w * dt;
-
-//        double q_value = 0.01 * dt;
-//        Q_mat << q_value;
-
-        // Вариант 2: Полная матрица 2x2 (если нужно)
-        // Eigen::Matrix2d Q_mat;
-        // Eigen::Vector2d gamma = Gamma(dt);
-        // Q_mat = gamma * gamma.transpose() * sigma_w * sigma_w;
-        // Q_mat += 1e-8 * Eigen::Matrix2d::Identity();
-
         return Q_mat;
     }
 
@@ -478,18 +474,12 @@ namespace model2
 
     // Шум процесса w_k
     Eigen::VectorXd w(double t, double dt, bool noise = false) {
-//        if (noise) {
-//            double dt = T;
-//            return kalman_noise::noise_gen.noiseWithCovariance(Q(dt));
-//        }
         if (!noise) {
-            return Eigen::Vector2d::Zero();
+            return Eigen::VectorXd::Zero(2);
         }
-
-        // Используем коррелированный шум
-        double omega = generate_correlated_noise();
+        // w(0) = 0, w(1) = коррелированный шум
         Eigen::Vector2d w_vec;
-        w_vec << 0.0, omega;
+        w_vec << 0.0, generate_correlated_noise();
         return w_vec;
     }
 
@@ -513,19 +503,11 @@ namespace model2
                                   ControlScenario scenario,
                                   bool add_noise = true)
     {
-        Eigen::Vector2d x_next = A(dt) * x + B(dt) * u(t, scenario);
-
-        if (add_noise) {
-            // Для модели 2: w - скаляр, B - 2x1, поэтому B*w дает правильный размер
-            x_next += B(dt) * w(t, dt, true)(0);
-        }
-
+        Eigen::Vector2d x_next = A(dt) * x + D(dt) * u(t, scenario);
         if (add_noise) {
             Eigen::VectorXd w_noise = w(t, dt, true);
-            // Преобразуем скалярный шум в векторный через G(dt)
-            x_next += Gamma(dt) * w_noise(0);
+            x_next += B(dt) * w_noise(0);
         }
-
         return x_next;
     }
 
@@ -542,4 +524,6 @@ namespace model2
 
         return y;
     }
-}
+} // namespace model2
+
+#endif // MODELS_HPP

@@ -2,14 +2,12 @@
 #include "data_generator.hpp"
 #include <iostream>
 #include <fstream>
-#include <iomanip>
 #include <chrono>
 #include <Eigen/Dense>
 #include <filesystem>
 
 void generate_all_formats() {
     std::cout << "\n=== Generating Data in All Formats ===\n";
-
     data_generator::SimulationConfig base_config;
     base_config.total_steps = 1000;
     base_config.base_dt = 0.01;
@@ -460,21 +458,22 @@ void test_model_comparison() {
 // ТЕСТ 7: БАЗОВЫЙ ТЕСТ ДЛЯ БЫСТРОЙ ПРОВЕРКИ
 // ============================================================================
 void test_basic() {
-    std::cout << "\n=== TEST 14: VARIABLE TIME STEP WITH NOISE ===\n";
+    std::cout << "\n=== TEST 8: WITH PROCESS AND MEASUREMENT NOISE ===\n";
 
     data_generator::SimulationConfig config;
-    config.total_steps = 200;
+    config.total_steps = 100;  // Увеличим для статистики
     config.base_dt = 0.02;
     config.add_process_noise = true;
     config.add_measurement_noise = true;
-    config.process_noise_scale = 1.0;
-    config.measurement_noise_scale = 1.0;
+    config.process_noise_scale = 1.0;      // Стандартный масштаб
+    config.measurement_noise_scale = 1.0;  // Стандартный масштаб
     config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
-    config.time_mode = time_generator::TimeMode::VARIABLE;  // Переменный шаг
+    config.time_mode = time_generator::TimeMode::UNIFORM;
     config.format = data_generator::DataFormat::TEXT_TXT;
-    config.output_dir = "./data/test_variable_time";
+    config.output_dir = "./data/test_with_noise";
 
-    run_test("Variable Time Step with Noise", config, 44444);
+    run_test("Test with Noise", config, 77777);
+
 }
 
 // ============================================================================
