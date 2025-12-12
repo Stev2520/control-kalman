@@ -460,19 +460,21 @@ void test_model_comparison() {
 // ТЕСТ 7: БАЗОВЫЙ ТЕСТ ДЛЯ БЫСТРОЙ ПРОВЕРКИ
 // ============================================================================
 void test_basic() {
-    std::cout << "\n=== TEST 7: BASIC FUNCTIONALITY TEST ===\n";
+    std::cout << "\n=== TEST 14: VARIABLE TIME STEP WITH NOISE ===\n";
 
     data_generator::SimulationConfig config;
-    config.total_steps = 10;
+    config.total_steps = 200;
     config.base_dt = 0.02;
-    config.add_process_noise = false;
-    config.add_measurement_noise = false;
+    config.add_process_noise = true;
+    config.add_measurement_noise = true;
+    config.process_noise_scale = 1.0;
+    config.measurement_noise_scale = 1.0;
     config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
-    config.time_mode = time_generator::TimeMode::UNIFORM;
-    config.format = data_generator::DataFormat::TEXT_TXT;  // Человекочитаемый формат
-    config.output_dir = "./data/basic_test";
+    config.time_mode = time_generator::TimeMode::VARIABLE;  // Переменный шаг
+    config.format = data_generator::DataFormat::TEXT_TXT;
+    config.output_dir = "./data/test_variable_time";
 
-    run_test("Basic Functionality Test", config, 77777);
+    run_test("Variable Time Step with Noise", config, 44444);
 }
 
 // ============================================================================

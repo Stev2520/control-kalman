@@ -75,7 +75,6 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         Eigen::MatrixXd Q_reg = Q + Eigen::MatrixXd::Identity(Q.rows(), Q.cols()) * 1e-8;
         SQ = Q_reg.llt().matrixL();
     } else {
-//        SQ = lltQ.matrixL();
         SQ = Q.llt().matrixL();
     }
 
@@ -85,12 +84,15 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         Eigen::MatrixXd R_reg = R + Eigen::MatrixXd::Identity(R.rows(), R.cols()) * 1e-8;
         SR = R_reg.llt().matrixL();
     } else {
-//        SR = lltR.matrixL();
         SR = R.llt().matrixL();
     }
     std::cout << "SQ (" << SQ.rows() << "x" << SQ.cols() << "): " << SQ << "\n";
     std::cout << "SR (" << SR.rows() << "x" << SR.cols() << "): " << SR << "\n";
-    std::cout << "S_: " << S_ << "\n";
+    std::cout << "Current S_: " << S_ << "\n";
+    Eigen::MatrixXd P_old = S_ * S_.transpose();
+    std::cout << "Initial covariance P_: " << P_old << "\n";
+    std::cout << "\n1. Covariance prediction:\n";
+    std::cout << "P_old Norm = " << P_old.norm() << "\n";
     if (!S_.allFinite()) {
         std::cout << "WARNING: S_ contains NaN/Inf, resetting to identity" << std::endl;
         S_ = Eigen::MatrixXd::Identity(nx, nx) * 0.1;
@@ -113,8 +115,10 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         // Верхний блок: [SR, C*S, 0]
         prearray.block(0, 0, ny, ny) = SR;
         prearray.block(0, ny, ny, nx) = C_times_S;
+        prearray.block(0, nx + ny, ny, nw).setZero();;
 
         // Нижний блок: [0, A*S, B*SQ]
+        prearray.block(ny, 0, nx, ny).setZero();
         prearray.block(ny, ny, nx, nx) = A_times_S;
         prearray.block(ny, nx + ny, nx, nw) = B_times_SQ;
     } catch (const std::exception& e) {
@@ -122,7 +126,8 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         return;
     }
 
-    std::cout << "Prearray:\n" << prearray << "\n";
+    std::cout << "Prearray (" << prearray.rows() << "x" << prearray.cols() << "):\n"
+              << prearray << "\n";
 
     if (!prearray.allFinite()) {
         std::cout << "ERROR: M contains NaN/Inf!" << std::endl;
@@ -135,11 +140,13 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
 
     // 3. QR разложение
     std::cout << "\n4. QR decomposition:\n";
-    Eigen::MatrixXd R_mat;
+    Eigen::MatrixXd R_mat, Q_mat;
     try {
         Eigen::HouseholderQR<Eigen::MatrixXd> qr(prearray.transpose());
         R_mat = qr.matrixQR().template triangularView<Eigen::Upper>();
         std::cout << "R_mat (" << R_mat.rows() << "x" << R_mat.cols() << "):\n" << R_mat << "\n";
+        Q_mat = qr.matrixQR().template triangularView<Eigen::Lower>();
+        std::cout << "Q_mat (" << Q_mat.rows() << "x" << Q_mat.cols() << "):\n" << Q_mat << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR in QR decomposition: " << e.what() << std::endl;
         return;
@@ -147,6 +154,11 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
 
     if (!R_mat.allFinite()) {
         std::cerr << "ERROR: R_mat contains NaN/Inf after QR!" << std::endl;
+        return;
+    }
+
+    if (!Q_mat.allFinite()) {
+        std::cerr << "ERROR: Q_mat contains NaN/Inf after QR!" << std::endl;
         return;
     }
 
@@ -160,9 +172,9 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     Eigen::MatrixXd postarray;
     // Берем нужный блок: первые (nx+ny) строк и столбцов
     try {
-        Eigen::MatrixXd R_top = R_mat.topLeftCorner(nx + ny, nx + ny);
+        Eigen::MatrixXd R_top = -1 * R_mat.topLeftCorner(nx + ny, nx + ny);
         postarray = R_top.transpose();
-        std::cout << "\n5. Postarray (" << postarray.rows() << "x" << postarray.cols() << "):\n" << postarray << "\n";
+        std::cout << "\nPostarray (" << postarray.rows() << "x" << postarray.cols() << "):\n" << postarray << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR extracting postarray: " << e.what() << std::endl;
         return;
@@ -180,58 +192,29 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         return;
     }
 
+    for (int i = 0; i < ny; ++i) {
+        if (postarray(i, i) < 0) {
+            postarray.row(i) = -postarray.row(i);
+        }
+    }
+
+    for (int i = 0; i < nx; ++i) {
+        int row_idx = ny + i;
+        if (postarray(row_idx, row_idx) < 0) {
+            postarray.row(row_idx) = -postarray.row(row_idx);
+        }
+    }
+    std::cout << "\nPostarray after update (" << postarray.rows() << "x" << postarray.cols() << "):\n" << postarray << "\n";
+
     // 4. Извлекаем блоки
     // post = [S_Re    0]
     //        [G      S_next]
     std::cout << "\n6. Extracting blocks:\n";
     Eigen::MatrixXd S_Re, G, S_next;
     try {
-        // Извлекаем блоки БЕЗ умножения на -1
-        Eigen::MatrixXd R_e_raw = postarray.block(0, 0, ny, ny);
-        Eigen::MatrixXd G_raw = postarray.block(ny, 0, nx, ny);
-        Eigen::MatrixXd S_next_raw = postarray.block(ny, ny, nx, nx);
-
-        std::cout << "\nRaw blocks (before sign correction):\n";
-        std::cout << "R_e_raw:\n" << R_e_raw << "\n";
-        std::cout << "G_raw:\n" << G_raw << "\n";
-        std::cout << "S_next_raw:\n" << S_next_raw << "\n";
-
-// Копируем для корректировки знаков
-        Eigen::MatrixXd R_e_corrected = R_e_raw;
-        Eigen::MatrixXd G_corrected = G_raw;
-        Eigen::MatrixXd S_next_corrected = S_next_raw;
-
-// 1. Корректируем R_e (должен быть нижнетреугольный с положительной диагональю)
-        for (int i = 0; i < ny; ++i) {
-            double diag_val = R_e_raw(i, i);
-            if (diag_val < 0) {
-                // Инвертируем знак всей строки i в R_e и соответствующей строки в G
-                R_e_corrected.row(i) = -R_e_raw.row(i);
-                G_corrected.row(i) = -G_raw.row(i);
-                std::cout << "Corrected sign for row " << i
-                          << " (diag was " << diag_val << ")\n";
-            }
-        }
-
-        // 2. Корректируем S_next (должен быть нижнетреугольный с положительной диагональю)
-        for (int i = 0; i < nx; ++i) {
-            double diag_val = S_next_raw(i, i);
-            if (diag_val < 0) {
-                // Инвертируем знак всей строки i в S_next
-                S_next_corrected.row(i) = -S_next_raw.row(i);
-                std::cout << "Corrected sign for S_next row " << i
-                          << " (diag was " << diag_val << ")\n";
-            }
-        }
-
-        Eigen::MatrixXd P_from_S = S_next_corrected * S_next_corrected.transpose();
-        std::cout << "P from corrected S_next:\n" << P_from_S << "\n";
-
-        // Присваиваем скорректированные блоки
-        S_Re = R_e_corrected;
-        G = G_corrected;
-        S_next = S_next_corrected;
-
+        S_Re = postarray.block(0, 0, ny, ny);
+        G = postarray.block(ny, 0, nx, ny);
+        S_next = postarray.block(ny, ny, nx, nx);
         std::cout << "\nCorrected blocks:\n";
         std::cout << "S_Re:\n" << S_Re << "\n";
         std::cout << "G:\n" << G << "\n";
@@ -243,12 +226,26 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
 
     if (!S_next.allFinite()) {
         std::cerr << "WARNING: S_next contains NaN/Inf, using fallback" << std::endl;
-        // Простой прогноз как запасной вариант
-        x_ = A * x_ + D * u;
-        S_ = (A * S_ * S_.transpose() * A.transpose() + B * Q * B.transpose())
-                .llt().matrixL();
         return;
     }
+
+    // === 5. ВЫЧИСЛЕНИЕ ЭКВИВАЛЕНТНЫХ ВЕЛИЧИН ===
+    std::cout << "\n5. Computing equivalent quantities:\n";
+
+    // P_next из SRCF (должно совпадать с CKF P_next)
+    Eigen::MatrixXd P_next_srcf = S_next * S_next.transpose();
+    std::cout << "SRCF P_next = S_next * S_next^T:\n" << P_next_srcf << "\n";
+
+    // Калманово усиление из SRCF: K = G * inv(S_Re)
+    Eigen::MatrixXd K_srcf = G * S_Re.inverse();
+    std::cout << "SRCF K = G * inv(S_Re):\n" << K_srcf << "\n";
+
+    // S матрица инноваций: S = S_Re * S_Re^T
+    Eigen::MatrixXd S_srcf = S_Re * S_Re.transpose();
+    std::cout << "SRCF S = S_Re * S_Re^T:\n" << S_srcf << "\n";
+
+    std::cout << "Condition number of S_Re: "
+              << S_Re.norm() * S_Re.inverse().norm() << "\n";
 
     // 5. Обновление состояния (численно устойчивое)
     std::cout << "\n7. State update:\n";
@@ -268,52 +265,73 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         std::cout << "z = S_Re\\innov: " << z.transpose() << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR solving triangular system: " << e.what() << std::endl;
-        // Запасной вариант: простой прогноз
-        x_ = A * x_ + D * u;
         return;
     }
 
     // 6. Обновляем состояние и ковариацию
     Eigen::VectorXd x_old = x_;
+    Eigen::VectorXd x_pred = A * x_ + D * u;
+    Eigen::VectorXd x_new = x_pred + G * z;
     std::cout << "x_old: " << x_old << " \n";
+    std::cout << "x_pred = A*x + D*u: " << x_pred.transpose() << "\n";
+    std::cout << "x_new = x_pred + G*z: " << x_new.transpose() << "\n";
+
     if (!z.allFinite()) {
         std::cerr << "WARNING: z contains NaN/Inf, using zero update" << std::endl;
-        x_ = A * x_ + D * u;
+        x_ = x_pred;
     } else {
         // Ограничение слишком больших обновлений
-        double z_norm = z.norm();
-//        if (z_norm > 100.0) {
-//            std::cerr << "WARNING: Large update in SRCF (z_norm = " << z_norm << "), limiting" << std::endl;
-////            z = z / z_norm * 100.0;
-//        }
         try {
             std::cout << "x_new = A*x + G*z + D*u:\n";
             std::cout << "  A*x = " << (A * x_).transpose() << "\n";
             std::cout << "  G*z = " << (G * z).transpose() << "\n";
             std::cout << "  D*u = " << (D * u).transpose() << "\n";
-            x_ = A * x_ + G * z + D * u;
+            x_ = x_new;
             std::cout << "  x_new = " << x_.transpose() << "\n";
         } catch (const std::exception& e) {
             std::cerr << "ERROR updating state: " << e.what() << std::endl;
-            x_ = A * x_ + D * u;
         }
     }
+    std::cout << "S_Re (should be Cholesky factor of S):\n" << S_Re << "\n";
+    std::cout << "S_next (Cholesky factor of P_pred):\n" << S_next << "\n";
+    // === 8. СРАВНЕНИЕ С CKF ===
+    std::cout << "\n=== FOR CKF COMPARISON (SRCF Summary) ===\n";
+    std::cout << "P_old (should match CKF P_old):\n" << P_old << "\n";
+    std::cout << "K (should match CKF K = G*inv(S_Re)):\n" << G << "\n";
+    std::cout << "Old x state: " << x_old.transpose() << "\n";
+    std::cout << "Final new x state: " << x_.transpose() << "\n";
+    std::cout << "Final covariance P_new (should match SKF P_new):\n" << P_next_srcf << "\n";
+    std::cout << "True state: " << (A * Eigen::Vector2d(0,0) + D * u).transpose() << "\n";
+
     S_ = S_next;
     // Дополнительная проверка: гарантируем нижнетреугольность
     S_ = S_.triangularView<Eigen::Lower>();
 
     // Проверка положительной определенности
-    Eigen::MatrixXd P_test = S_ * S_.transpose();
-    Eigen::LLT<Eigen::MatrixXd> llt_test(P_test);
+    Eigen::LLT<Eigen::MatrixXd> llt_test(P_next_srcf);
     if (llt_test.info() != Eigen::Success) {
         std::cerr << "WARNING: P not positive definite after update, regularizing" << std::endl;
         // Регуляризация
-        P_test += Eigen::MatrixXd::Identity(nx, nx) * 1e-8;
-        S_ = P_test.llt().matrixL();
+        P_next_srcf += Eigen::MatrixXd::Identity(nx, nx) * 1e-8;
+        S_ = P_next_srcf.llt().matrixL();
     }
 
-    std::cout << "\n=== Summary ===\n";
-    std::cout << "Old state: " << x_old.transpose() << "\n";
-    std::cout << "New state: " << x_.transpose() << "\n";
-    std::cout << "True state: " << (A * Eigen::Vector2d(0,0) + B * u).transpose() << "\n";
+    // === ПРОВЕРКА ===
+    std::cout << "\n=== CHECKS ===\n";
+
+    // Проверка положительной определенности
+    Eigen::LLT<Eigen::MatrixXd> llt_pred_srcf(P_old);
+    Eigen::LLT<Eigen::MatrixXd> llt_new_srcf(P_next_srcf);
+
+    std::cout << "SRCF P_pred positive definite: "
+              << (llt_pred_srcf.info() == Eigen::Success ? "YES" : "NO") << "\n";
+    std::cout << "SRCF P_new positive definite: "
+              << (llt_new_srcf.info() == Eigen::Success ? "YES" : "NO") << "\n";
+
+    // Проверка симметрии
+    double asym_pred_srcf = (P_old - P_old.transpose()).norm() / P_old.norm();
+    double asym_new_srcf = (P_next_srcf - P_next_srcf.transpose()).norm() / P_next_srcf.norm();
+
+    std::cout << "SRCF P_pred asymmetry: " << asym_pred_srcf << "\n";
+    std::cout << "SRCF P_new asymmetry: " << asym_new_srcf << "\n";
 }
