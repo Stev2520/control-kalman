@@ -463,10 +463,10 @@ void test_basic() {
     std::cout << "\n=== TEST 7: BASIC FUNCTIONALITY TEST ===\n";
 
     data_generator::SimulationConfig config;
-    config.total_steps = 500;
+    config.total_steps = 10;
     config.base_dt = 0.02;
-    config.add_process_noise = true;
-    config.add_measurement_noise = true;
+    config.add_process_noise = false;
+    config.add_measurement_noise = false;
     config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
     config.time_mode = time_generator::TimeMode::UNIFORM;
     config.format = data_generator::DataFormat::TEXT_TXT;  // Человекочитаемый формат

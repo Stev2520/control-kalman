@@ -1025,6 +1025,11 @@ namespace data_generator {
 
     void analyze_verhaegen_style(const SimulationData& data, bool test_ckf = true) {
         std::cout << "\n=== ANALYSIS IN VERHAEGEN & VAN DOOREN STYLE ===\n";
+        std::cout << "===TESTING TIMES===" << std::endl;
+        for (int i = 0; i < data.times.size(); ++i) {
+            std::cout << data.times[i] << " ";
+        }
+        std::cout << std::endl;
 
         // 1. Анализ численной устойчивости
         if (test_ckf) {

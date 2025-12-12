@@ -23,6 +23,14 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
                 const Eigen::VectorXd &u, const Eigen::VectorXd &y)
 {
     std::cout << "\n=== Manual SRCF Step ===\n";
+    std::cout << "A_matrix: " << A << "\n";
+    std::cout << "B_matrix: " << B << "\n";
+    std::cout << "C_matrix: " << C << "\n";
+    std::cout << "D_matrix: " << D << "\n";
+    std::cout << "Q_matrix: " << Q << "\n";
+    std::cout << "R_matrix: " << R << "\n";
+    std::cout << "U_vector: " << u << "\n";
+    std::cout << "Y_vector: " << y << "\n";
     const size_t nx = x_.size();
     const size_t ny = y.size();
     const size_t nw = B.cols();
@@ -82,7 +90,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     }
     std::cout << "SQ (" << SQ.rows() << "x" << SQ.cols() << "): " << SQ << "\n";
     std::cout << "SR (" << SR.rows() << "x" << SR.cols() << "): " << SR << "\n";
-
+    std::cout << "S_: " << S_ << "\n";
     if (!S_.allFinite()) {
         std::cout << "WARNING: S_ contains NaN/Inf, resetting to identity" << std::endl;
         S_ = Eigen::MatrixXd::Identity(nx, nx) * 0.1;
@@ -178,12 +186,56 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     std::cout << "\n6. Extracting blocks:\n";
     Eigen::MatrixXd S_Re, G, S_next;
     try {
-        S_Re = postarray.block(0, 0, ny, ny);
-        G = postarray.block(ny, 0, nx, ny);
-        S_next = postarray.block(ny, ny, nx, nx);
-        std::cout << "S_Re (" << S_Re.rows() << "x" << S_Re.cols() << "): " << S_Re << "\n";
-        std::cout << "G (" << G.rows() << "x" << G.cols() << "):\n" << G << "\n";
-        std::cout << "S_next (" << S_next.rows() << "x" << S_next.cols() << "):\n" << S_next << "\n";
+        // Извлекаем блоки БЕЗ умножения на -1
+        Eigen::MatrixXd R_e_raw = postarray.block(0, 0, ny, ny);
+        Eigen::MatrixXd G_raw = postarray.block(ny, 0, nx, ny);
+        Eigen::MatrixXd S_next_raw = postarray.block(ny, ny, nx, nx);
+
+        std::cout << "\nRaw blocks (before sign correction):\n";
+        std::cout << "R_e_raw:\n" << R_e_raw << "\n";
+        std::cout << "G_raw:\n" << G_raw << "\n";
+        std::cout << "S_next_raw:\n" << S_next_raw << "\n";
+
+// Копируем для корректировки знаков
+        Eigen::MatrixXd R_e_corrected = R_e_raw;
+        Eigen::MatrixXd G_corrected = G_raw;
+        Eigen::MatrixXd S_next_corrected = S_next_raw;
+
+// 1. Корректируем R_e (должен быть нижнетреугольный с положительной диагональю)
+        for (int i = 0; i < ny; ++i) {
+            double diag_val = R_e_raw(i, i);
+            if (diag_val < 0) {
+                // Инвертируем знак всей строки i в R_e и соответствующей строки в G
+                R_e_corrected.row(i) = -R_e_raw.row(i);
+                G_corrected.row(i) = -G_raw.row(i);
+                std::cout << "Corrected sign for row " << i
+                          << " (diag was " << diag_val << ")\n";
+            }
+        }
+
+        // 2. Корректируем S_next (должен быть нижнетреугольный с положительной диагональю)
+        for (int i = 0; i < nx; ++i) {
+            double diag_val = S_next_raw(i, i);
+            if (diag_val < 0) {
+                // Инвертируем знак всей строки i в S_next
+                S_next_corrected.row(i) = -S_next_raw.row(i);
+                std::cout << "Corrected sign for S_next row " << i
+                          << " (diag was " << diag_val << ")\n";
+            }
+        }
+
+        Eigen::MatrixXd P_from_S = S_next_corrected * S_next_corrected.transpose();
+        std::cout << "P from corrected S_next:\n" << P_from_S << "\n";
+
+        // Присваиваем скорректированные блоки
+        S_Re = R_e_corrected;
+        G = G_corrected;
+        S_next = S_next_corrected;
+
+        std::cout << "\nCorrected blocks:\n";
+        std::cout << "S_Re:\n" << S_Re << "\n";
+        std::cout << "G:\n" << G << "\n";
+        std::cout << "S_next:\n" << S_next << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR extracting blocks: " << e.what() << std::endl;
         return;
@@ -223,6 +275,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
 
     // 6. Обновляем состояние и ковариацию
     Eigen::VectorXd x_old = x_;
+    std::cout << "x_old: " << x_old << " \n";
     if (!z.allFinite()) {
         std::cerr << "WARNING: z contains NaN/Inf, using zero update" << std::endl;
         x_ = A * x_ + D * u;
