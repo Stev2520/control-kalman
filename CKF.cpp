@@ -9,7 +9,7 @@ CKF::CKF(const size_t nx) : x_(Eigen::VectorXd::Zero(nx)),
 
 CKF::CKF(Eigen::VectorXd x0,
          Eigen::MatrixXd P0) : x_(std::move(x0)),
-                                      P_(std::move(P0)) { }
+                               P_(std::move(P0)) { }
 
 void CKF::initialize(const Eigen::VectorXd &x0,
                      const Eigen::MatrixXd &P0)

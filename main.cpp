@@ -1,6 +1,5 @@
 
 #include "data_generator.hpp"
-#include "analysis_tools.hpp"
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -17,7 +16,7 @@ void generate_all_formats() {
     base_config.add_measurement_noise = true;
     base_config.process_noise_scale = 1.0;
     base_config.measurement_noise_scale = 1.0;
-    base_config.scenario = model2::ControlScenario::STEP_MANEUVER;
+    base_config.scenario.scenario2 = model2::ControlScenario::STEP_MANEUVER;
     base_config.time_mode = time_generator::TimeMode::UNIFORM;
 
     // Создаем корневую директорию
@@ -150,7 +149,7 @@ void test_txt_format() {
     config.add_measurement_noise = true;
     config.process_noise_scale = 1.0;
     config.measurement_noise_scale = 1.0;
-    config.scenario = model2::ControlScenario::SINE_WAVE;
+    config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
     config.format = data_generator::DataFormat::TEXT_TXT;
     config.output_dir = "./data/txt_test";
 
@@ -194,7 +193,7 @@ void run_test(const std::string& test_name,
     gen.save(data);
 
     // Анализируем в стиле Verhaegen & Van Dooren
-    analysis::analyze_verhaegen_style(data);
+    data_generator::analyze_verhaegen_style(data);
 
     // Сохраняем сравнение в CSV
     std::string csv_file = config.output_dir + "/comparison.csv";
@@ -255,7 +254,7 @@ void run_verhaegen_tests() {
         config.add_measurement_noise = true;
         config.process_noise_scale = process_scale;
         config.measurement_noise_scale = meas_scale;
-        config.scenario = model2::ControlScenario::SINE_WAVE;
+        config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
         config.time_mode = time_generator::TimeMode::UNIFORM;
         config.format = data_generator::DataFormat::BINARY;
         config.output_dir = "./data/verhaegen_test_" + std::to_string(test_num + 1);
@@ -326,7 +325,7 @@ void test_different_formats() {
     base_config.base_dt = 0.01;
     base_config.add_process_noise = true;
     base_config.add_measurement_noise = true;
-    base_config.scenario = model2::ControlScenario::STEP_MANEUVER;
+    base_config.scenario.scenario2 = model2::ControlScenario::STEP_MANEUVER;
     base_config.time_mode = time_generator::TimeMode::UNIFORM;
 
     // Тестируем все форматы
@@ -366,7 +365,7 @@ void test_different_scenarios() {
         config.base_dt = 0.01;
         config.add_process_noise = true;
         config.add_measurement_noise = true;
-        config.scenario = scenario;
+        config.scenario.scenario2 = scenario;
         config.time_mode = time_generator::TimeMode::UNIFORM;
         config.format = data_generator::DataFormat::BINARY;
         config.output_dir = "./data/scenario_" + name;
@@ -394,7 +393,7 @@ void test_different_time_modes() {
         config.base_dt = 0.01;
         config.add_process_noise = true;
         config.add_measurement_noise = true;
-        config.scenario = model2::ControlScenario::SINE_WAVE;
+        config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
         config.time_mode = mode;
         config.format = data_generator::DataFormat::BINARY;
         config.output_dir = "./data/time_mode_" + name;
@@ -417,7 +416,7 @@ void test_unstable_system() {
     config.add_measurement_noise = true;
     config.process_noise_scale = 5.0;      // Увеличенный шум процесса
     config.measurement_noise_scale = 0.1;  // Низкий шум измерений
-    config.scenario = model2::ControlScenario::STEP_MANEUVER;
+    config.scenario.scenario2 = model2::ControlScenario::STEP_MANEUVER;
     config.time_mode = time_generator::TimeMode::UNIFORM;
     config.format = data_generator::DataFormat::TEXT_CSV;  // Для анализа
     config.output_dir = "./data/unstable_test";
@@ -431,20 +430,17 @@ void test_unstable_system() {
 void test_model_comparison() {
     std::cout << "\n=== TEST 6: MODEL COMPARISON ===\n";
 
-    // Для этой функции нужно расширить ваш генератор данных,
-    // чтобы он поддерживал model0. Сейчас он работает только с model2.
 
     std::cout << "NOTE: Model 0 support needs to be added to DataGenerator.\n";
     std::cout << "Currently only Model 2 is supported.\n";
 
-    // Пример как это могло бы выглядеть:
-    /*
     // Тест с Model 0
     {
         data_generator::SimulationConfig config;
         config.model_type = data_generator::ModelType::MODEL0;
         config.scenario.scenario0 = model0::ControlScenario::SINE_WAVE;
         config.output_dir = "./data/model0_test";
+        config.test_ckf = false;
         run_test("Model 0 Test", config, 11111);
     }
 
@@ -454,9 +450,9 @@ void test_model_comparison() {
         config.model_type = data_generator::ModelType::MODEL2;
         config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
         config.output_dir = "./data/model2_test";
+        config.test_ckf = false;
         run_test("Model 2 Test", config, 22222);
     }
-    */
 }
 
 // ============================================================================
@@ -470,7 +466,7 @@ void test_basic() {
     config.base_dt = 0.02;
     config.add_process_noise = true;
     config.add_measurement_noise = true;
-    config.scenario = model2::ControlScenario::SINE_WAVE;
+    config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
     config.time_mode = time_generator::TimeMode::UNIFORM;
     config.format = data_generator::DataFormat::TEXT_TXT;  // Человекочитаемый формат
     config.output_dir = "./data/basic_test";
@@ -499,8 +495,9 @@ int main() {
     std::cout << "2. Verhaegen noise tests only\n";
     std::cout << "3. Format comparison tests\n";
     std::cout << "4. Basic functionality test\n";
-    std::cout << "5. Custom test\n";
-    std::cout << "Enter choice (1-5): ";
+    std::cout << "5. Test model comparison\n";
+    std::cout << "6. Custom test\n";
+    std::cout << "Enter choice (1-6): ";
     std::cin >> choice;
 
     switch (choice) {
@@ -512,6 +509,7 @@ int main() {
             test_different_scenarios();
             test_different_time_modes();
             test_unstable_system();
+            test_model_comparison();
             break;
 
         case 2:  // Только тесты Verhaegen
@@ -529,7 +527,12 @@ int main() {
             test_basic();
             break;
 
-        case 5:  // Пользовательский тест
+        case 5:  // Сравнение 2-х моделей на одном фильтре
+            std::cout << "\nComparing models test...\n";
+            test_model_comparison();
+            break;
+
+        case 6:  // Пользовательский тест
         {
             std::cout << "\nRunning custom test...\n";
             data_generator::SimulationConfig config;
@@ -544,7 +547,7 @@ int main() {
             std::cout << "Select scenario (0=ZERO_HOLD, 1=STEP, 2=SINE, 3=PULSE): ";
             int scenario;
             std::cin >> scenario;
-            config.scenario = static_cast<model2::ControlScenario>(scenario);
+            config.scenario.scenario2 = static_cast<model2::ControlScenario>(scenario);
 
             std::cout << "Select format (0=BINARY, 1=CSV, 2=MATLAB, 3=TXT): ";
             int format;

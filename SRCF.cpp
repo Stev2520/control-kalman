@@ -202,7 +202,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         // Ограничение слишком больших обновлений
         double z_norm = z.norm();
 //        if (z_norm > 100.0) {
-//            std::cerr << "WARNING: Large update (z_norm = " << z_norm << "), limiting" << std::endl;
+//            std::cerr << "WARNING: Large update in SRCF (z_norm = " << z_norm << "), limiting" << std::endl;
 ////            z = z / z_norm * 100.0;
 //        }
 
@@ -210,7 +210,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
             x_ = A * x_ + G * z + D * u;
         } catch (const std::exception& e) {
             std::cerr << "ERROR updating state: " << e.what() << std::endl;
-            x_ = A * x_ + D * u;  // Запасной вариант
+            x_ = A * x_ + D * u;
         }
     }
     S_ = S_next;
