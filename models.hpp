@@ -1,26 +1,79 @@
+/**
+ * @file models.hpp
+ * @brief Модели систем для фильтра Калмана (самолетное применение)
+ * @author FAST_DEVELOPMENT (NORREYLL)
+ * @date 2025
+ * @version 2.0
+ *
+ * @copyright MIT License
+ *
+ * @note Данный файл содержит модели двух систем:
+ *       1. MODEL0 - Упрощенная модель рыскания самолета (yaw model)
+ *       2. MODEL2 - Модель крена самолета (roll model)
+ *       Каждая модель включает матрицы состояния, ковариации шумов,
+ *       функции управления и генерации данных для симуляции.
+ */
+
 #ifndef MODELS_HPP
 #define MODELS_HPP
 
 #pragma once
+
 #include <Eigen/Dense>
 #include <random>
 #include <functional>
 #include <cmath>
 
+// ============================================================================
+// ГЕНЕРАТОР ШУМА
+// ============================================================================
+
+namespace model0 {
+    void reset_noise_with_seed(int seed);
+}
+
+namespace model2 {
+    void reset_noise_with_seed(int seed);
+}
+
+/**
+ * @namespace kalman_noise
+ * @brief Пространство имен для генерации шумов в фильтре Калмана
+ */
 namespace kalman_noise
 {
+    /**
+     * @class NoiseGenerator
+     * @brief Генератор гауссовского шума для фильтра Калмана
+     *
+     * @note Поддерживает генерацию скалярного шума, векторного шума
+     *       и шума с заданной ковариационной матрицей.
+     */
     class NoiseGenerator
     {
     private:
-        std::default_random_engine generator;
-        std::normal_distribution<double> distribution;
+        std::default_random_engine generator; /**< Генератор случайных чисел */
+        std::normal_distribution<double> distribution; /**< Нормальное распределение N(0,1) */
 
     public:
-        NoiseGenerator(int seed = std::random_device{}())
+        /**
+         * @brief Конструктор генератора шума
+         * @param seed Начальное значение для генератора случайных чисел
+         */
+        explicit NoiseGenerator(int seed = std::random_device{}())
             : generator(seed), distribution(0.0, 1.0) {}
 
+        /**
+        * @brief Генерация скалярного гауссовского шума
+        * @return double Значение шума из распределения N(0,1)
+        */
         double gaussian() { return distribution(generator); }
 
+        /**
+         * @brief Генерация векторного гауссовского шума
+         * @param size Размерность вектора
+         * @return Eigen::VectorXd Вектор независимых гауссовских шумов N(0,1)
+         */
         Eigen::VectorXd gaussianVector(int size)
         {
             Eigen::VectorXd res(size);
@@ -28,55 +81,160 @@ namespace kalman_noise
             return res;
         }
 
+        /**
+         * @brief Генерация шума с заданной ковариационной матрицей
+         * @param covariance Ковариационная матрица шума
+         * @return Eigen::VectorXd Вектор шума с заданной ковариацией
+         *
+         * @note Используется разложение Холецкого: v = L * ξ, где L = chol(C)
+         */
         Eigen::VectorXd noiseWithCovariance(const Eigen::MatrixXd& covariance)
         {
-            return covariance.llt().matrixL() * gaussianVector(covariance.rows());
+            Eigen::LLT<Eigen::MatrixXd> llt(covariance);
+            if (llt.info() != Eigen::Success) {
+                throw std::runtime_error("NoiseGenerator: covariance matrix is not positive definite");
+            }
+            return llt.matrixL() * gaussianVector(covariance.rows());
         }
 
+        /**
+         * @brief Установка нового зерна для генератора
+         * @param seed Новое значение зерна
+         */
         void setSeed(int seed) { generator.seed(seed); }
+
+        /**
+         * @brief Получение текущего состояния генератора
+         * @return std::default_random_engine& Ссылка на генератор
+         */
+        std::default_random_engine& getGenerator() {
+            return generator;
+        }
+
+        void reset(int seed = std::random_device{}()) {
+            generator.seed(seed);
+            distribution.reset();
+        }
+
+        void reset_with_state(int seed = std::random_device{}()) {
+            // Полный сброс: создаем новый объект
+            *this = NoiseGenerator(seed);
+        }
+
     };
 
+    /**
+     * @brief Статический экземпляр генератора шума для общего использования
+     */
     static NoiseGenerator noise_gen;
+
+    inline void reset_noise_generators(int seed = 42) {
+        noise_gen.reset_with_state(seed);
+
+        // Передаем seed в функции сброса
+        model0::reset_noise_with_seed(seed);
+        model2::reset_noise_with_seed(seed);
+    }
 } // namespace kalman_noise
 
 // ============================================================================
 // МОДЕЛЬ 0: Упрощенная модель рыскания самолета (yaw model)
 // ============================================================================
+
+/**
+ * @namespace model0
+ * @brief Упрощенная модель рыскания самолета
+ *
+ * @note Модель описывает динамику рыскания самолета:
+ *       x = [ψ, r]ᵀ, где ψ - угол рыскания, r - скорость рыскания
+ *       Уравнение: J·ṙ = -k₁·r + k₂·δ_r + w(t)
+ *       где δ_r - отклонение руля направления
+ */
 namespace model0
 {
     // Параметры системы
-    const double b = 1.0;           // Коэффициент управления (-k₁/J)
-    const double sigma_w = 1.0;     // Стандартное отклонение шума процесса (умеренный шум)
-    const double sigma_v = 1.0;     // Стандартное отклонение шума измерений
+    const double b = 1.0;           /**< Коэффициент управления (-k₁/J) */
+    const double sigma_w = 1.0;     /**< Стандартное отклонение шума процесса (умеренный шум) */
+    const double sigma_v = 1.0;     /**< Стандартное отклонение шума измерений */
 
-    // Переменные для генерации коррелированного шума (если нужно)
-    static double last_w = 0.0;
-    static double alpha = 0.9;      // Коэффициент корреляции
+    // Переменные для генерации коррелированного шума
+//    static double last_w = 0.0;     /**< Последнее значение коррелированного шума */
+//    static double alpha = 0.9;      /**< Коэффициент корреляции AR(1) процесса */
 
+    /**
+     * @enum ControlScenario
+     * @brief Сценарии управления для модели 0
+     */
     enum class ControlScenario {
-        ZERO_HOLD,      // u = 0 (автопилот)
-        STEP_MANEUVER,  // Ступенчатое управление
-        SINE_WAVE,      // Синусоидальное управление
-        PULSE           // Импульсное управление
+        ZERO_HOLD,      /**< u = 0 (автопилот, стабилизация) */
+        STEP_MANEUVER,  /**< Ступенчатое управление */
+        SINE_WAVE,      /**< Синусоидальное управление */
+        PULSE           /**< Импульсное управление */
     };
 
-    // Инициализация шума
-    void reset_noise() {
-        last_w = 0.0;
+    // Структура для хранения состояния генератора
+    struct NoiseState {
+        double last_w = 0.0;
+        double alpha = 0.98;
+        std::default_random_engine generator;
+        std::normal_distribution<double> distribution;
+
+        NoiseState(int seed = 42)
+                : generator(seed), distribution(0.0, 1.0) {}
+
+        void reset(int seed) {
+            last_w = 0.0;
+            generator.seed(seed);
+            distribution.reset();
+        }
+    };
+
+    // Thread-local состояние
+    thread_local NoiseState noise_state(42);
+
+    void reset_noise_with_seed(int seed) {
+        noise_state.reset(seed);
     }
 
-    // Генерация коррелированного шума процесса
     double generate_correlated_noise() {
-        double xi = kalman_noise::noise_gen.gaussian();
-        last_w = alpha * last_w + sigma_w * sqrt(1 - alpha*alpha) * xi;
-        return last_w;
+        double xi = noise_state.distribution(noise_state.generator);
+        noise_state.last_w = noise_state.alpha * noise_state.last_w +
+                             sigma_w * std::sqrt(1.0 - noise_state.alpha * noise_state.alpha) * xi;
+        return noise_state.last_w;
     }
+
+    /**
+     * @brief Сброс состояния генератора шума
+     */
+//    void reset_noise_with_seed(int seed) {
+//        last_w = 0.0;
+//        generator.seed(seed);
+//    }
+
+    /**
+     * @brief Генерация коррелированного шума процесса по модели AR(1)
+     * @return double Значение коррелированного шума
+     *
+     * @note Модель: ω_k = α·ω_{k-1} + σ·√(1-α²)·ξ_k
+     */
+//    double generate_correlated_noise()
+//    {
+//        double xi = distribution(generator);
+//        last_w = alpha * last_w + sigma_w * std::sqrt(1.0 - alpha * alpha) * xi;
+//        return last_w;
+//    }
 
     // ------------------------------------------------------------------------
     // МАТРИЦЫ МОДЕЛИ
     // ------------------------------------------------------------------------
 
-    // Матрица перехода состояния (дискретная)
+    /**
+     * @brief Матрица перехода состояния (дискретная)
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::MatrixXd Матрица перехода размером 2×2
+     *
+     * @note Для модели двойного интегратора: x_{k+1} = [1, dt; 0, 1]·x_k
+     */
     Eigen::MatrixXd A(double dt)
     {
         Eigen::MatrixXd phi = Eigen::MatrixXd::Zero(2, 2);
@@ -87,7 +245,13 @@ namespace model0
         return phi;
     }
 
-    // Матрица управления (дискретная)
+    /**
+     * @brief Матрица управления (дискретная)
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::MatrixXd Матрица управления размером 2×1
+     *
+     * @note Для двойного интегратора с управлением: ψ = [0.5·dt², dt]ᵀ·b
+     */
     Eigen::MatrixXd B(double dt)
     {
         Eigen::MatrixXd psi(2, 1);
@@ -96,18 +260,33 @@ namespace model0
         return psi;
     }
 
-    // Матрица измерений
+    /**
+     * @brief Матрица измерений
+     * @param t Время (не используется, для совместимости)
+     * @return Eigen::MatrixXd Единичная матрица измерений 2×2
+     */
     Eigen::MatrixXd C(double t = 0.0)
     {
         return Eigen::MatrixXd::Identity(2, 2);
     }
 
-    // Матрица прямого воздействия (обычно 0 для фильтра Калмана)
-    Eigen::MatrixXd G(double dt = 0.0) {
+    /**
+     * @brief Матрица прямого воздействия (обычно нулевая для фильтра Калмана)
+     * @param dt Шаг дискретизации (не используется)
+     * @return Eigen::MatrixXd Нулевая матрица 2×1
+     */
+    Eigen::MatrixXd G(double dt = 0.0)
+    {
         return Eigen::MatrixXd::Zero(2, 1);
     }
 
-    // Матрица воздействия шума процесса (дискретная)
+    /**
+     * @brief Матрица воздействия шума процесса (дискретная)
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::VectorXd Вектор воздействия шума размером 2
+     *
+     * @note γ = [0.5·dt², dt]ᵀ для двойного интегратора
+     */
     Eigen::VectorXd D(double dt)
     {
         Eigen::VectorXd gamma = Eigen::VectorXd::Zero(2);
@@ -119,34 +298,49 @@ namespace model0
     // ------------------------------------------------------------------------
     // КОВАРИАЦИОННЫЕ МАТРИЦЫ
     // ------------------------------------------------------------------------
-    // Ковариация шума процесса (дискретная)
-    Eigen::MatrixXd Q(double dt) {
-        // Q_disc = G * σ_w² * Gᵀ
+    /**
+     * @brief Ковариация шума процесса (дискретная)
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::MatrixXd Матрица ковариации 2×2
+     *
+     * @note Q_disc = γ·σ_w²·γᵀ с регуляризацией для положительной определенности
+     */
+    Eigen::MatrixXd Q(double dt)
+    {
         Eigen::MatrixXd gamma = D(dt);
         Eigen::MatrixXd Q_disc = gamma * gamma.transpose() * sigma_w * sigma_w;
 
         // Гарантируем положительную определенность
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Q_disc);
         if (solver.eigenvalues().minCoeff() < 1e-12) {
-            // Добавить стабилизацию
             Q_disc += 1e-8 * Eigen::MatrixXd::Identity(Q_disc.rows(), Q_disc.cols());
         }
         return Q_disc;
     }
 
-    // Ковариация шума измерений (дискретная)
-    Eigen::MatrixXd R(double t = 0.0) {
+    /**
+     * @brief Ковариация шума измерений (дискретная)
+     * @param t Время (не используется, для совместимости)
+     * @return Eigen::MatrixXd Матрица ковариации 2×2
+     *
+     * @note R = σ_v²·I с регуляризацией
+     */
+    Eigen::MatrixXd R(double t = 0.0)
+    {
         Eigen::Matrix2d R_mat = Eigen::Matrix2d::Identity() * sigma_v * sigma_v;
 
         // Гарантируем положительную определенность
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(R_mat);
-        if (solver.eigenvalues().minCoeff() < 1e-12) {
-            // Добавить стабилизацию
-            R_mat += 1e-8 * Eigen::MatrixXd::Identity(R_mat.rows(), R_mat.cols());
+        if (R_mat.determinant() < 1e-12) {
+            R_mat += 1e-8 * Eigen::Matrix2d::Identity();
         }
         return R_mat;
     }
 
+    /**
+     * @brief Константная ковариация шума процесса (для тестирования)
+     * @param t Время (не используется)
+     * @return Eigen::MatrixXd Фиксированная матрица ковариации 2×2
+     */
     Eigen::MatrixXd Q_const(double t = 0.0)
     {
         static const Eigen::MatrixXd Q_const = []() {
@@ -158,6 +352,11 @@ namespace model0
         return Q_const;
     }
 
+    /**
+     * @brief Константная ковариация шума измерений (для тестирования)
+     * @param t Время (не используется)
+     * @return Eigen::MatrixXd Фиксированная матрица ковариации 2×2
+     */
     Eigen::MatrixXd R_const(double t = 0.0)
     {
         static const Eigen::MatrixXd R_const = []() {
@@ -170,10 +369,15 @@ namespace model0
     }
 
     // ------------------------------------------------------------------------
-    // СИГНАЛЫ
+    // СИГНАЛЫ УПРАВЛЕНИЯ И ШУМОВ
     // ------------------------------------------------------------------------
 
-    // Входное управление u(t) (отклонение руля)
+    /**
+     * @brief Входное управление (отклонение руля направления)
+     * @param t Текущее время (секунды)
+     * @param scenario Сценарий управления
+     * @return Eigen::VectorXd Вектор управления размером 1
+     */
     Eigen::VectorXd u(double t,
                       ControlScenario scenario = ControlScenario::SINE_WAVE)
     {
@@ -203,8 +407,15 @@ namespace model0
         return u_vec;
     }
 
-    // Шум процесса w_k
-    Eigen::VectorXd w(double t, double dt, bool noise = false) {
+    /**
+     * @brief Шум процесса
+     * @param t Время (не используется)
+     * @param dt Шаг времени (не используется)
+     * @param noise Флаг добавления шума
+     * @return Eigen::VectorXd Вектор шума процесса размером 1
+     */
+    Eigen::VectorXd w(double t, double dt, bool noise = false)
+    {
         if (!noise) {
             return Eigen::VectorXd::Zero(1);  // Скалярный шум
         }
@@ -214,7 +425,12 @@ namespace model0
         return w_vec;
     }
 
-    // Шум измерений v_k
+    /**
+    * @brief Шум измерений
+    * @param t Время (для вычисления ковариации)
+    * @param noise Флаг добавления шума
+    * @return Eigen::VectorXd Вектор шума измерений размером 2
+    */
     Eigen::VectorXd v(double t,
                       bool noise = false)
     {
@@ -228,6 +444,15 @@ namespace model0
     // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
     // ------------------------------------------------------------------------
 
+    /**
+     * @brief Истинная динамика системы
+     * @param x Текущее состояние [ψ, r]ᵀ
+     * @param t Текущее время (секунды)
+     * @param dt Шаг времени (секунды)
+     * @param scenario Сценарий управления
+     * @param add_noise Флаг добавления шума процесса
+     * @return Eigen::Vector2d Следующее состояние системы
+     */
     Eigen::Vector2d true_dynamics(const Eigen::Vector2d& x,
                                   double t,
                                   double dt,
@@ -244,54 +469,124 @@ namespace model0
 
         return x_next;
     }
+//    Eigen::Vector2d true_dynamics(const Eigen::Vector2d& x,
+//                                  double t,
+//                                  double dt,
+//                                  ControlScenario scenario,
+//                                  bool add_noise = true)
+//    {
+//        Eigen::Vector2d x_next = A(dt) * x + B(dt) * u(t, scenario)(0);
+//
+//        if (add_noise) {
+//            Eigen::VectorXd w_noise = w(t, dt, true);
+//            // Для двойного интегратора: шум прилагается как управление
+//            x_next += D(dt) * w_noise(0);
+//        }
+//
+//        return x_next;
+//    }
 } // namespace model0
 
 //// ============================================================================
 //// МОДЕЛЬ 2: Модель крена самолета (roll model)
 //// ============================================================================
+
+/**
+ * @namespace model2
+ * @brief Модель крена самолета
+ *
+ * @note Модель описывает динамику крена самолета:
+ *       x = [φ, p]ᵀ, где φ - угол крена, p - скорость крена
+ *       Уравнения: φ̇ = p
+ *                  ṗ = -L_φ·φ - L_p·p + L_δ·δ_a + w(t)
+ *       где δ_a - отклонение элеронов
+ */
 namespace model2
 {
-    const double L_phi = 2.5; // 1/с² (восстанавливающий момент)
-    const double L_p = 1.0; // 1/с (демпфирование)
-    const double L_delta = 15.0; // 1/с² (эффективность элеронов)
-    const double g = 9.80665; // м/с²
-    const double T = 0.01; // шаг дискретизации (100 Гц)
+    // Параметры системы
+    const double L_phi = 2.5;       /**< 1/с² (восстанавливающий момент) */
+    const double L_p = 1.0;         /**< 1/с (демпфирование) */
+    const double L_delta = 15.0;    /**< 1/с² (эффективность элеронов) */
+    const double g = 9.80665;       /**< м/с² (ускорение свободного падения) */
+    const double sigma_w = 0.02;    /**< рад/с² (интенсивность шума процесса) */
+    const double sigma_g = 0.01;    /**< рад/с (шум гироскопа) */
+    const double sigma_a = 0.02;    /**< рад (шум акселерометра) */
 
-    const double sigma_w = 0.02;  // рад/с² (интенсивность шума процесса)
-    const double sigma_g = 0.01;  // рад/с (шум гироскопа)
-    const double sigma_a = 0.02;  // рад (шум акселерометра)
+    // Переменные для коррелированного шума
+//    static double last_omega = 0.0; /**< Последнее значение коррелированного шума */
+//    static bool is_initialized = false;
+//    static double alpha = 0.98;     /**< Коэффициент корреляции AR(1) процесса */
 
-    // Переменные для коррелированного шума (скрытые)
-    static double last_omega = 0.0;
-    static double alpha = 0.98;  // коэффициент корреляции
-
+    /**
+     * @enum ControlScenario
+     * @brief Сценарии управления для модели 2
+     */
     enum class ControlScenario {
-        ZERO_HOLD,      // u=0 (автопилот)
-        STEP_MANEUVER,  // ступенчатое управление
-        SINE_WAVE,      // синусоида
-        PULSE           // импульс
+        ZERO_HOLD,      /**< u=0 (автопилот, стабилизация) */
+        STEP_MANEUVER,  /**< Ступенчатое управление */
+        SINE_WAVE,      /**< Синусоидальное управление */
+        PULSE           /**< Импульсное управление */
     };
 
-    // Инициализация шума (можно вызывать в начале симуляции)
-    void reset_noise() {
-        last_omega = 0.0;
+    // Структура для хранения состояния генератора
+    struct NoiseState {
+        double last_w = 0.0;
+        double alpha = 0.98;
+        std::default_random_engine generator;
+        std::normal_distribution<double> distribution;
+
+        NoiseState(int seed = 42)
+                : generator(seed), distribution(0.0, 1.0) {}
+
+        void reset(int seed) {
+            last_w = 0.0;
+            generator.seed(seed);
+            distribution.reset();
+        }
+    };
+
+    // Thread-local состояние
+    thread_local NoiseState noise_state(42);
+
+    void reset_noise_with_seed(int seed) {
+        noise_state.reset(seed);
     }
 
-    // Генерация коррелированного шума процесса
     double generate_correlated_noise() {
-        // Модель AR(1): ω_k = α·ω_{k-1} + σ·√(1-α²)·ξ_k
-        double xi = kalman_noise::noise_gen.gaussian();
-        last_omega = alpha * last_omega + sigma_w * sqrt(1 - alpha * alpha) * xi;
-        return last_omega;
+        double xi = noise_state.distribution(noise_state.generator);
+        noise_state.last_w = noise_state.alpha * noise_state.last_w +
+                             sigma_w * std::sqrt(1.0 - noise_state.alpha * noise_state.alpha) * xi;
+        return noise_state.last_w;
     }
+
+    /**
+     * @brief Генерация коррелированного шума процесса по модели AR(1)
+     * @return double Значение коррелированного шума
+     *
+     * @note Модель: ω_k = α·ω_{k-1} + σ·√(1-α²)·ξ_k
+     */
+//    double generate_correlated_noise()
+//    {
+//        double xi = distribution(generator);
+//        last_w = alpha * last_w + sigma_w * std::sqrt(1.0 - alpha * alpha) * xi;
+//        return last_w;
+//    }
 
     // ------------------------------------------------------------------------
     // ОСНОВНЫЕ ФУНКЦИИ ДИСКРЕТИЗАЦИИ
     // ------------------------------------------------------------------------
 
     // Формулы для Φ(T), ψ(T), Γ(T)
-    // Матрица перехода состояния
-    Eigen::MatrixXd Phi(double dt) {
+    /**
+     * @brief Матрица перехода состояния (аналитическое решение)
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::Matrix2d Матрица перехода 2×2
+     *
+     * @note Аналитическое решение для системы: ẋ = A·x, где A = [0, 1; -L_φ, -L_p]
+     *       Собственные значения: λ = -0.5 ± 1.5i
+     */
+    Eigen::MatrixXd Phi(double dt)
+    {
         Eigen::Matrix2d phi;
         double exp_term = exp(-0.5*dt);
         double sin_term = sin(1.5*dt);
@@ -303,8 +598,13 @@ namespace model2
         return phi;
     }
 
-    // Входная матрица для управления (дискретная)
-    Eigen::Vector2d Psi(double dt) {
+    /**
+     * @brief Вектор влияния управления (дискретный)
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::Vector2d Вектор управления 2×1
+     */
+    Eigen::Vector2d Psi(double dt)
+    {
         Eigen::Vector2d psi;
         double exp_term = exp(-0.5 * dt);
         double sin_term = sin(1.5 * dt);
@@ -314,8 +614,13 @@ namespace model2
         return psi;
     }
 
-    // Матрица для шума процесса (дискретная)
-    Eigen::Vector2d Gamma(double dt) {
+    /**
+     * @brief Матрица воздействия шума процесса (дискретная)
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::Vector2d Вектор воздействия шума 2×1
+     */
+    Eigen::Vector2d Gamma(double dt)
+    {
         Eigen::Vector2d gamma;
         double exp_term = exp(-0.5 * dt);
         double sin_term = sin(1.5 * dt);
@@ -329,23 +634,35 @@ namespace model2
     // НЕПРЕРЫВНЫЕ МАТРИЦЫ (для справки)
     // ------------------------------------------------------------------------
 
-    // Непрерывная матрица A для линеаризованной системы
-    Eigen::Matrix2d A_continuous() {
+    /**
+     * @brief Непрерывная матрица состояния A
+     * @return Eigen::Matrix2d Матрица A непрерывной системы
+     */
+    Eigen::Matrix2d A_continuous()
+    {
         Eigen::Matrix2d A = Eigen::Matrix2d::Zero(2, 2);
         A << 0, 1,
             -L_phi, -L_p;
         return A;
     }
 
-    // Непрерывная матрица B для управления для линеаризованной системы
-    Eigen::Vector2d D_continuous() {
+    /**
+    * @brief Непрерывная матрица управления D
+    * @return Eigen::Vector2d Вектор управления непрерывной системы
+    */
+    Eigen::Vector2d D_continuous()
+    {
         Eigen::Vector2d D = Eigen::Vector2d::Zero(2);
         D << 0, L_delta;
         return D;
     }
 
-    // Непрерывная матрица G для шума процесса для линеаризованной системы
-    Eigen::Vector2d B_continuous() {
+    /**
+     * @brief Непрерывная матрица воздействия шума B
+     * @return Eigen::Vector2d Вектор воздействия шума непрерывной системы
+     */
+    Eigen::Vector2d B_continuous()
+    {
         Eigen::Vector2d B = Eigen::Vector2d::Zero(2);
         B << 0, 1;
         return B;
@@ -355,13 +672,21 @@ namespace model2
     // МАТРИЦЫ ДЛЯ ФИЛЬТРА КАЛМАНА
     // ------------------------------------------------------------------------
 
-    // Матрица перехода состояния (дискретная)
+    /**
+     * @brief Матрица перехода состояния (дискретная) для фильтра Калмана
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::MatrixXd Матрица перехода 2×2
+     */
     Eigen::MatrixXd A(double dt)
     {
         return Phi(dt);
     }
 
-    // Матрица управления (дискретная)
+    /**
+     * @brief Матрица управления (дискретная) для фильтра Калмана
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::MatrixXd Матрица управления 2×1
+     */
     Eigen::MatrixXd D(double dt) {
         Eigen::Vector2d psi = Psi(dt);
         Eigen::MatrixXd B_mat(2, 1);
@@ -369,7 +694,14 @@ namespace model2
         return B_mat;
     }
 
-    // Матрица измерений C
+    /**
+     * @brief Матрица измерений C
+     * @param t Время (не используется, для совместимости)
+     * @return Eigen::Matrix2d Матрица измерений 2×2
+     *
+     * @note y₁ = p (угловая скорость крена, гироскоп)
+     *       y₂ = g·sin(φ) ≈ g·φ (ускорение, акселерометр)
+     */
     Eigen::Matrix2d C(double t = 0.0) {
         // Матрица измерений: y1 = p (угловая скорость), y2 = g*sin(φ) ≈ g*φ
         Eigen::MatrixXd C_mat = Eigen::MatrixXd::Zero(2, 2);
@@ -378,7 +710,11 @@ namespace model2
         return C_mat;
     }
 
-    // Матрица прямого воздействия
+    /**
+     * @brief Матрица воздействия шума процесса для фильтра Калмана
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::MatrixXd Матрица воздействия шума 2×1
+     */
     Eigen::MatrixXd B(double dt = 0.0) {
         return Gamma(dt);
     }
@@ -387,15 +723,29 @@ namespace model2
     // КОВАРИАЦИОННЫЕ МАТРИЦЫ
     // ------------------------------------------------------------------------
 
-    // Ковариация шума процесса (дискретная)
-    Eigen::MatrixXd Q(double dt) {
+    /**
+     * @brief Ковариация шума процесса (дискретная)
+     * @param dt Шаг дискретизации (секунды)
+     * @return Eigen::MatrixXd Матрица ковариации 1×1
+     *
+     * @note Для скалярного шума: Q = σ_w²·dt
+     */
+    Eigen::MatrixXd Q(double dt)
+    {
         Eigen::MatrixXd Q_mat(1, 1);
         Q_mat << sigma_w * sigma_w * dt;
         return Q_mat;
     }
 
-    // Ковариация шума измерений
-    Eigen::MatrixXd R(double t = 0.0) {
+    /**
+     * @brief Ковариация шума измерений
+     * @param t Время (не используется, для совместимости)
+     * @return Eigen::Matrix2d Матрица ковариации 2×2
+     *
+     * @note R = diag(σ_g², σ_a²) с регуляризацией
+     */
+    Eigen::MatrixXd R(double t = 0.0)
+    {
         Eigen::Matrix2d R_mat;
         double rg = sigma_g * sigma_g;  // дисперсия гироскопа
         double ra = sigma_a * sigma_a;  // дисперсия акселерометра
@@ -404,24 +754,33 @@ namespace model2
 
         // Гарантируем положительную определенность
         if (R_mat.determinant() < 1e-12) {
-            std::cout << "WARNING: R is near-singular, adding stabilization\n";
+            std::cout << "[MODEL2] WARNING: R is near-singular, adding stabilization\n";
             R_mat += Eigen::Matrix2d::Identity() * 1e-6;
         }
 
         return R_mat;
     }
 
-    // Ковариация шума процесса Q
-    // Это мощность непрерывного белого шума w(t)
-    Eigen::Matrix2d Q_const(double t = 0.0) {
+    /**
+     * @brief Константная ковариация шума процесса (для тестирования)
+     * @param t Время (не используется)
+     * @return Eigen::Matrix2d Фиксированная матрица ковариации 2×2
+     */
+    Eigen::Matrix2d Q_const(double t = 0.0)
+    {
         Eigen::Matrix2d Q_const;
         Q_const << 0.01, 0.0,
                 0.0, 0.01;
         return Q_const;
     }
 
-    // Ковариация шума измерений R
-    Eigen::Matrix2d R_const(double t = 0.0) {
+    /**
+     * @brief Константная ковариация шума измерений (для тестирования)
+     * @param t Время (не используется)
+     * @return Eigen::Matrix2d Фиксированная матрица ковариации 2×2
+     */
+    Eigen::Matrix2d R_const(double t = 0.0)
+    {
         Eigen::Matrix2d R_const;
         R_const << 0.1, 0.0,    // шум гироскопа (рад/с)
                 0.0, 0.5;    // шум акселерометра (м/с²)
@@ -438,7 +797,12 @@ namespace model2
     // СИГНАЛЫ
     // ------------------------------------------------------------------------
 
-    // Входное управление u(t) (отклонение элеронов)
+    /**
+    * @brief Входное управление (отклонение элеронов)
+    * @param t Текущее время (секунды)
+    * @param scenario Сценарий управления
+    * @return Eigen::VectorXd Вектор управления размером 1
+    */
     Eigen::VectorXd u(double t, ControlScenario scenario = ControlScenario::SINE_WAVE)
     {
         Eigen::VectorXd u_vec(1);
@@ -472,8 +836,15 @@ namespace model2
         return u_vec;
     }
 
-    // Шум процесса w_k
-    Eigen::VectorXd w(double t, double dt, bool noise = false) {
+    /**
+     * @brief Шум процесса
+     * @param t Время (не используется)
+     * @param dt Шаг времени (не используется)
+     * @param noise Флаг добавления шума
+     * @return Eigen::Vector2d Вектор шума процесса размером 2
+     */
+    Eigen::VectorXd w(double t, double dt, bool noise = false)
+    {
         if (!noise) {
             return Eigen::VectorXd::Zero(2);
         }
@@ -483,9 +854,15 @@ namespace model2
         return w_vec;
     }
 
-    // Шум измерений v_k
+    /**
+     * @brief Шум измерений
+     * @param t Время (для вычисления ковариации)
+     * @param noise Флаг добавления шума
+     * @return Eigen::Vector2d Вектор шума измерений размером 2
+     */
     Eigen::VectorXd v(double t,
-                      bool noise = false) {
+                      bool noise = false)
+    {
         if (!noise) {
             return Eigen::Vector2d::Zero();
         }
@@ -493,10 +870,18 @@ namespace model2
     }
 
     // ------------------------------------------------------------------------
-    // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+    // ДИНАМИКА СИСТЕМЫ И ИЗМЕРЕНИЯ
     // ------------------------------------------------------------------------
 
-    // Истинная динамика системы
+    /**
+     * @brief Истинная динамика системы
+     * @param x Текущее состояние [φ, p]ᵀ
+     * @param t Текущее время (секунды)
+     * @param dt Шаг времени (секунды)
+     * @param scenario Сценарий управления
+     * @param add_noise Флаг добавления шума процесса
+     * @return Eigen::Vector2d Следующее состояние системы
+     */
     Eigen::Vector2d true_dynamics(const Eigen::Vector2d& x,
                                   double t,
                                   double dt,
@@ -506,17 +891,47 @@ namespace model2
         Eigen::Vector2d x_next = A(dt) * x + D(dt) * u(t, scenario);
         if (add_noise) {
             Eigen::VectorXd w_noise = w(t, dt, true);
-            x_next += B(dt) * w_noise(0);
+            x_next += B(dt) * w_noise(1);
         }
         return x_next;
     }
 
-    // Измерения
-    Eigen::Vector2d measurement(const Eigen::Vector2d& x,
-                                double t,
-                                bool add_noise = true)
+    /**
+ * @brief Функция измерений (точная, нелинейная)
+ * @param x Текущее состояние [φ, p]ᵀ
+ * @param t Текущее время (для вычисления шума)
+ * @param add_noise Флаг добавления шума измерений
+ * @return Eigen::Vector2d Вектор измерений
+ */
+    Eigen::Vector2d measurement_exact(const Eigen::Vector2d& x,
+                                      double t,
+                                      bool add_noise = true)
     {
-        Eigen::Vector2d y = C(t) * x;
+        Eigen::Vector2d y;
+        y << x(1),                     // p (угловая скорость)
+                g * std::sin(x(0));       // g·sin(φ) (точное)
+
+        if (add_noise) {
+            y += v(t, true);
+        }
+
+        return y;
+    }
+
+    /**
+     * @brief Функция измерений (линеаризованная для фильтра Калмана)
+     * @param x Текущее состояние [φ, p]ᵀ
+     * @param t Текущее время (для вычисления шума)
+     * @param add_noise Флаг добавления шума измерений
+     * @return Eigen::Vector2d Вектор измерений
+     */
+    Eigen::Vector2d measurement_linearized(const Eigen::Vector2d& x,
+                                           double t,
+                                           bool add_noise = true)
+    {
+        Eigen::Vector2d y;
+        y << x(1),                     // p (угловая скорость)
+                g * x(0);                 // g·φ (линеаризованное)
 
         if (add_noise) {
             y += v(t, true);

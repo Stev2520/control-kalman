@@ -1,3 +1,16 @@
+/**
+ * @file main.cpp
+ * @brief Тестовый набор для сравнения фильтров Калмана
+ * @author FAST_DEVELOPMENT (NORREYLL)
+ * @date 2025
+ * @version 2.0
+ *
+ * @copyright MIT License
+ *
+ * @note Основной файл для тестирования и сравнения классического (CKF)
+ *       и квадратно-корневого (SRCF) фильтров Калмана. Включает тесты
+ *       в стиле Verhaegen & Van Dooren (1986) и различные сценарии.
+ */
 
 #include "data_generator.hpp"
 #include <iostream>
@@ -6,7 +19,18 @@
 #include <Eigen/Dense>
 #include <filesystem>
 
-void generate_all_formats() {
+// ============================================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ============================================================================
+
+/**
+ * @brief Генерация данных во всех поддерживаемых форматах
+ *
+ * @note Создает данные в форматах BINARY, CSV, MATLAB и TXT
+ *       для сравнения размеров файлов и удобства использования.
+ */
+void generate_all_formats()
+{
     std::cout << "\n=== Generating Data in All Formats ===\n";
     data_generator::SimulationConfig base_config;
     base_config.total_steps = 1000;
@@ -15,8 +39,11 @@ void generate_all_formats() {
     base_config.add_measurement_noise = true;
     base_config.process_noise_scale = 1.0;
     base_config.measurement_noise_scale = 1.0;
+    base_config.model_type = data_generator::ModelType::MODEL2;
     base_config.scenario.scenario2 = model2::ControlScenario::STEP_MANEUVER;
     base_config.time_mode = time_generator::TimeMode::UNIFORM;
+    base_config.use_custom_initial = false;
+    base_config.seed = 12345;
 
     // Создаем корневую директорию
     std::string root_dir = "./data/all_formats";
@@ -53,7 +80,7 @@ void generate_all_formats() {
         system(command.c_str());
 
         try {
-            data_generator::DataGenerator gen(config, 12345);
+            data_generator::DataGenerator gen(config, base_config.seed);
             auto data = gen.generate();
             gen.save(data);
 
@@ -131,13 +158,16 @@ void generate_all_formats() {
 
         std::cout << "Binary total size: " << binary_total << " bytes\n";
         std::cout << "TXT total size: " << txt_total << " bytes\n";
-        std::cout << "Compression ratio (TXT/Binary): "
-                  << (double)txt_total / binary_total << "\n";
+        if (binary_total > 0) {
+            const double compression_ratio = static_cast<double>(txt_total) / binary_total;
+            std::cout << "Compression ratio (TXT/Binary): " << compression_ratio << "\n";
+        }
     }
-
 }
 
-// Тестирование чтения TXT формата
+/**
+ * @brief Тестирование чтения/записи TXT формата
+ */
 void test_txt_format() {
     std::cout << "\n=== TESTING TXT FORMAT READ/WRITE ===\n";
 
@@ -148,86 +178,111 @@ void test_txt_format() {
     config.add_measurement_noise = true;
     config.process_noise_scale = 1.0;
     config.measurement_noise_scale = 1.0;
+    config.model_type = data_generator::ModelType::MODEL2;
     config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
     config.format = data_generator::DataFormat::TEXT_TXT;
+    config.use_custom_initial = false;
+    config.seed = 999;
     config.output_dir = "./data/txt_test";
 
     // Создаем директорию
     std::filesystem::create_directories(config.output_dir);
 
-    // Генерация данных
-    data_generator::DataGenerator gen(config, 999);
-    auto sim_data = gen.generate();
-    gen.save(sim_data);
+    try {
+        // Генерация данных
+        data_generator::DataGenerator gen(config, config.seed);
+        auto sim_data = gen.generate();
+        gen.save(sim_data);
 
-    std::cout << "TXT data saved to: " << config.output_dir << "\n";
+        std::cout << "TXT data saved to: " << config.output_dir << "\n";
 
-    // Проверка файлов
-    std::cout << "\nChecking generated files:\n";
-    for (const auto& entry : std::filesystem::directory_iterator(config.output_dir)) {
-        if (entry.is_regular_file()) {
-            std::cout << "  • " << entry.path().filename().string()
-                      << " (" << entry.file_size() << " bytes)\n";
+        // Проверка файлов
+        std::cout << "\nChecking generated files:\n";
+        for (const auto& entry : std::filesystem::directory_iterator(config.output_dir)) {
+            if (entry.is_regular_file()) {
+                std::cout << "  • " << entry.path().filename().string()
+                          << " (" << entry.file_size() << " bytes)\n";
+            }
         }
+    } catch (const std::exception& e) {
+        std::cout << "ERROR: " << e.what() << "\n";
     }
 }
 
 // ============================================================================
-// УНИВИЦИРОВАННАЯ ФУНКЦИЯ ДЛЯ ЗАПУСКА ТЕСТОВ
+// ОБЩАЯ ФУНКЦИЯ ТЕСТИРОВАНИЯ
 // ============================================================================
+
+/**
+ * @brief Запуск отдельного теста с сохранением результатов
+ *
+ * @param test_name Название теста
+ * @param config Конфигурация симуляции
+ * @param seed Зерно для генератора случайных чисел
+ */
 void run_test(const std::string& test_name,
               const data_generator::SimulationConfig& config,
-              int seed = 42) {
-
+              int seed = 42)
+{
     std::cout << "\n=== " << test_name << " ===\n";
 
     // Создаем директорию
     std::filesystem::create_directories(config.output_dir);
 
-    // Генерируем данные
-    data_generator::DataGenerator gen(config, seed);
-    auto data = gen.generate();
+    try {
+        // Генерируем данные
+        data_generator::DataGenerator gen(config, seed);
+        auto data = gen.generate();
 
-    // Сохраняем данные
-    gen.save(data);
+        // Сохраняем данные
+        gen.save(data);
 
-    // Анализируем в стиле Verhaegen & Van Dooren
-    data_generator::analyze_verhaegen_style(data);
+        // Анализируем в стиле Verhaegen & Van Dooren
+        data_generator::analyze_verhaegen_style(data, config.test_ckf);
 
-    // Сохраняем сравнение в CSV
-    std::string csv_file = config.output_dir + "/comparison.csv";
+        // Сохраняем сравнение в CSV (если тестируется CKF)
+        if (config.test_ckf && !data.ckf_estimates.empty()) {
+            const std::string csv_file = config.output_dir + "/comparison.csv";
+            std::ofstream comparison_file(csv_file);
 
-    std::ofstream comparison_file(csv_file);
-    comparison_file << "Step,CKF_Error,SRCF_Error,CKF_Cov_Norm,SRCF_Cov_Norm,Innovation\n";
+            comparison_file << "Step,CKF_Error,SRCF_Error,CKF_Cov_Norm,SRCF_Cov_Norm,Innovation\n";
 
-    for (size_t i = 0; i < data.true_states.size(); i += 10) {  // Сохраняем каждый 10-й шаг
-        double ckf_error = (data.true_states[i] - data.ckf_estimates[i]).norm();
-        double srcf_error = (data.true_states[i] - data.srcf_estimates[i]).norm();
-        double ckf_cov_norm = data.ckf_covariances[i].norm();
-        double srcf_cov_norm = data.srcf_covariances[i].norm();
-        double innovation = 0.0;
+            for (size_t i = 0; i < data.true_states.size(); i += 1) {  // Сохраняем каждый 1-й шаг
+                const double ckf_error = (data.true_states[i] - data.ckf_estimates[i]).norm();
+                const double srcf_error = (data.true_states[i] - data.srcf_estimates[i]).norm();
+                const double ckf_cov_norm = data.ckf_covariances[i].norm();
+                const double srcf_cov_norm = data.srcf_covariances[i].norm();
+                double innovation = 0.0;
 
-        if (i > 0) {
-            Eigen::Vector2d innov = data.noisy_measurements[i] - data.measurements[i];
-            innovation = innov.norm();
+                if (i > 0) {
+                    const Eigen::Vector2d innov = data.noisy_measurements[i] - data.measurements[i];
+                    innovation = innov.norm();
+                }
+
+                comparison_file << i << ","
+                                << ckf_error << ","
+                                << srcf_error << ","
+                                << ckf_cov_norm << ","
+                                << srcf_cov_norm << ","
+                                << innovation << "\n";
+            }
+            comparison_file.close();
         }
-
-        comparison_file << i << ","
-                        << ckf_error << ","
-                        << srcf_error << ","
-                        << ckf_cov_norm << ","
-                        << srcf_cov_norm << ","
-                        << innovation << "\n";
+        std::cout << "Results saved to: " << config.output_dir << "\n";
+    } catch (const std::exception& e) {
+        std::cout << "ERROR in test '" << test_name << "': " << e.what() << "\n";
     }
-    comparison_file.close();
-
-    std::cout << "Results saved to: " << config.output_dir << "\n";
 }
 
 // ============================================================================
 // ТЕСТ 1: РАЗНЫЕ УРОВНИ ШУМА (как в статье Verhaegen & Van Dooren)
 // ============================================================================
-void run_verhaegen_tests() {
+
+/**
+ * @brief Тесты с разными уровнями шума (статья Verhaegen & Van Dooren)
+ */
+void run_verhaegen_tests()
+{
     std::cout << "\n=== TEST SERIES 1: NOISE LEVEL TESTS (Verhaegen Style) ===\n";
 
     std::vector<std::pair<double, double>> noise_levels = {
@@ -253,60 +308,71 @@ void run_verhaegen_tests() {
         config.add_measurement_noise = true;
         config.process_noise_scale = process_scale;
         config.measurement_noise_scale = meas_scale;
+        config.model_type = data_generator::ModelType::MODEL2;
         config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
         config.time_mode = time_generator::TimeMode::UNIFORM;
         config.format = data_generator::DataFormat::BINARY;
+        config.use_custom_initial = false;
+        config.seed = 12345 + static_cast<int>(test_num);
         config.output_dir = "./data/verhaegen_test_" + std::to_string(test_num + 1);
 
         std::string test_name = "Verhaegen Test " + std::to_string(test_num + 1) +
                                 " (Proc=" + std::to_string(process_scale) +
                                 ", Meas=" + std::to_string(meas_scale) + ")";
 
-        run_test(test_name, config, 12345 + test_num);
+        run_test(test_name, config, config.seed);
 
-        // Для сводного файла нужно прочитать метрики
-        data_generator::DataGenerator gen(config, 12345 + test_num);
-        auto data = gen.generate();
+        try {
+            // Для сводного файла нужно прочитать метрики
+            data_generator::DataGenerator gen(config, 12345 + static_cast<int>(test_num));
+            auto data = gen.generate();
 
-        // Рассчитываем метрики для сводного файла
-        double ckf_avg = 0.0, srcf_avg = 0.0;
-        double ckf_rms = 0.0, srcf_rms = 0.0;
-        double ckf_asym = 0.0, srcf_asym = 0.0;
-        int ckf_posdef = 0, srcf_posdef = 0;
+            // Рассчитываем метрики для сводного файла
+            double ckf_avg = 0.0, srcf_avg = 0.0;
+            double ckf_rms = 0.0, srcf_rms = 0.0;
+            double ckf_asym = 0.0, srcf_asym = 0.0;
+            int ckf_posdef = 0, srcf_posdef = 0;
 
-        for (size_t i = 0; i < data.true_states.size(); ++i) {
-            double ckf_err = (data.true_states[i] - data.ckf_estimates[i]).norm();
-            double srcf_err = (data.true_states[i] - data.srcf_estimates[i]).norm();
+            for (size_t i = 0; i < data.true_states.size(); ++i) {
+                const double ckf_err = (data.true_states[i] - data.ckf_estimates[i]).norm();
+                const double srcf_err = (data.true_states[i] - data.srcf_estimates[i]).norm();
 
-            ckf_avg += ckf_err;
-            srcf_avg += srcf_err;
-            ckf_rms += ckf_err * ckf_err;
-            srcf_rms += srcf_err * srcf_err;
+                ckf_avg += ckf_err;
+                srcf_avg += srcf_err;
+                ckf_rms += ckf_err * ckf_err;
+                srcf_rms += srcf_err * srcf_err;
 
-            Eigen::Matrix2d asym_ckf = data.ckf_covariances[i] - data.ckf_covariances[i].transpose();
-            Eigen::Matrix2d asym_srcf = data.srcf_covariances[i] - data.srcf_covariances[i].transpose();
+                const Eigen::Matrix2d asym_ckf = data.ckf_covariances[i] -
+                                                 data.ckf_covariances[i].transpose();
+                const Eigen::Matrix2d asym_srcf = data.srcf_covariances[i] -
+                                                  data.srcf_covariances[i].transpose();
 
-            ckf_asym = std::max(ckf_asym, asym_ckf.norm() / data.ckf_covariances[i].norm());
-            srcf_asym = std::max(srcf_asym, asym_srcf.norm() / data.srcf_covariances[i].norm());
+                ckf_asym = std::max(ckf_asym, asym_ckf.norm() / data.ckf_covariances[i].norm());
+                srcf_asym = std::max(srcf_asym, asym_srcf.norm() / data.srcf_covariances[i].norm());
 
-            Eigen::LLT<Eigen::Matrix2d> llt_ckf(data.ckf_covariances[i]);
-            Eigen::LLT<Eigen::Matrix2d> llt_srcf(data.srcf_covariances[i]);
+                Eigen::LLT<Eigen::Matrix2d> llt_ckf(data.ckf_covariances[i]);
+                Eigen::LLT<Eigen::Matrix2d> llt_srcf(data.srcf_covariances[i]);
 
-            if (llt_ckf.info() == Eigen::Success) ckf_posdef++;
-            if (llt_srcf.info() == Eigen::Success) srcf_posdef++;
+                if (llt_ckf.info() == Eigen::Success) ckf_posdef++;
+                if (llt_srcf.info() == Eigen::Success) srcf_posdef++;
+            }
+
+            ckf_avg /= data.true_states.size();
+            srcf_avg /= data.true_states.size();
+            ckf_rms = std::sqrt(ckf_rms / data.true_states.size());
+            srcf_rms = std::sqrt(srcf_rms / data.true_states.size());
+
+            summary_file << test_num + 1 << ","
+                         << process_scale << "," << meas_scale << ","
+                         << ckf_avg << "," << srcf_avg << ","
+                         << ckf_rms << "," << srcf_rms << ","
+                         << ckf_asym << "," << srcf_asym << ","
+                         << ckf_posdef << "," << srcf_posdef << "\n";
+
+        } catch (const std::exception& e) {
+            std::cout << "WARNING: Could not generate summary for test "
+                      << test_num + 1 << ": " << e.what() << "\n";
         }
-
-        ckf_avg /= data.true_states.size();
-        srcf_avg /= data.true_states.size();
-        ckf_rms = sqrt(ckf_rms / data.true_states.size());
-        srcf_rms = sqrt(srcf_rms / data.true_states.size());
-
-        summary_file << test_num + 1 << ","
-                     << process_scale << "," << meas_scale << ","
-                     << ckf_avg << "," << srcf_avg << ","
-                     << ckf_rms << "," << srcf_rms << ","
-                     << ckf_asym << "," << srcf_asym << ","
-                     << ckf_posdef << "," << srcf_posdef << "\n";
     }
 
     summary_file.close();
@@ -316,7 +382,12 @@ void run_verhaegen_tests() {
 // ============================================================================
 // ТЕСТ 2: РАЗНЫЕ ФОРМАТЫ ДАННЫХ
 // ============================================================================
-void test_different_formats() {
+
+/**
+ * @brief Тестирование всех поддерживаемых форматов данных
+ */
+void test_different_formats()
+{
     std::cout << "\n=== TEST SERIES 2: DIFFERENT DATA FORMATS ===\n";
 
     data_generator::SimulationConfig base_config;
@@ -324,8 +395,11 @@ void test_different_formats() {
     base_config.base_dt = 0.01;
     base_config.add_process_noise = true;
     base_config.add_measurement_noise = true;
+    base_config.model_type = data_generator::ModelType::MODEL2;
     base_config.scenario.scenario2 = model2::ControlScenario::STEP_MANEUVER;
     base_config.time_mode = time_generator::TimeMode::UNIFORM;
+    base_config.use_custom_initial = false;
+    base_config.seed = 54321;
 
     // Тестируем все форматы
     std::vector<std::pair<data_generator::DataFormat, std::string>> formats = {
@@ -341,14 +415,18 @@ void test_different_formats() {
         config.output_dir = "./data/format_test_" + name;
 
         std::string test_name = "Format Test: " + name;
-        run_test(test_name, config, 54321);
+        run_test(test_name, config, base_config.seed);
     }
 }
 
 // ============================================================================
 // ТЕСТ 3: РАЗНЫЕ СЦЕНАРИИ УПРАВЛЕНИЯ
 // ============================================================================
-void test_different_scenarios() {
+/**
+ * @brief Тестирование различных сценариев управления
+ */
+void test_different_scenarios()
+{
     std::cout << "\n=== TEST SERIES 3: DIFFERENT CONTROL SCENARIOS ===\n";
 
     std::vector<std::pair<model2::ControlScenario, std::string>> scenarios = {
@@ -364,20 +442,28 @@ void test_different_scenarios() {
         config.base_dt = 0.01;
         config.add_process_noise = true;
         config.add_measurement_noise = true;
+        config.model_type = data_generator::ModelType::MODEL2;
         config.scenario.scenario2 = scenario;
         config.time_mode = time_generator::TimeMode::UNIFORM;
         config.format = data_generator::DataFormat::BINARY;
+        config.use_custom_initial = false;
         config.output_dir = "./data/scenario_" + name;
+        config.seed = 67890 + static_cast<int>(scenario);
 
         std::string test_name = "Scenario: " + name;
-        run_test(test_name, config, 67890 + static_cast<int>(scenario));
+        run_test(test_name, config, config.seed);
     }
 }
 
 // ============================================================================
 // ТЕСТ 4: РАЗНЫЕ РЕЖИМЫ ВРЕМЕНИ
 // ============================================================================
-void test_different_time_modes() {
+
+/**
+ * @brief Тестирование различных режимов генерации временных меток
+ */
+void test_different_time_modes()
+{
     std::cout << "\n=== TEST SERIES 4: DIFFERENT TIME MODES ===\n";
 
     std::vector<std::pair<time_generator::TimeMode, std::string>> time_modes = {
@@ -392,20 +478,27 @@ void test_different_time_modes() {
         config.base_dt = 0.01;
         config.add_process_noise = true;
         config.add_measurement_noise = true;
+        config.model_type = data_generator::ModelType::MODEL2;
         config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
         config.time_mode = mode;
         config.format = data_generator::DataFormat::BINARY;
+        config.use_custom_initial = false;
         config.output_dir = "./data/time_mode_" + name;
-
+        config.seed = 33333 + static_cast<int>(mode);
         std::string test_name = "Time Mode: " + name;
-        run_test(test_name, config, 33333 + static_cast<int>(mode));
+        run_test(test_name, config, config.seed);
     }
 }
 
 // ============================================================================
 // ТЕСТ 5: НЕУСТОЙЧИВАЯ СИСТЕМА (как в статье)
 // ============================================================================
-void test_unstable_system() {
+
+/**
+ * @brief Тестирование неустойчивой системы (увеличенный шум процесса)
+ */
+void test_unstable_system()
+{
     std::cout << "\n=== TEST 5: UNSTABLE SYSTEM (Verhaegen Style) ===\n";
 
     data_generator::SimulationConfig config;
@@ -415,51 +508,82 @@ void test_unstable_system() {
     config.add_measurement_noise = true;
     config.process_noise_scale = 5.0;      // Увеличенный шум процесса
     config.measurement_noise_scale = 0.1;  // Низкий шум измерений
+    config.model_type = data_generator::ModelType::MODEL2;
     config.scenario.scenario2 = model2::ControlScenario::STEP_MANEUVER;
     config.time_mode = time_generator::TimeMode::UNIFORM;
     config.format = data_generator::DataFormat::TEXT_CSV;  // Для анализа
+    config.use_custom_initial = false;
     config.output_dir = "./data/unstable_test";
-
-    run_test("Unstable System Test", config, 99999);
+    config.seed = 99999;
+    run_test("Unstable System Test", config, config.seed);
 }
 
 // ============================================================================
-// ТЕСТ 6: МОДЕЛЬ 0 VS МОДЕЛЬ 2
+// ТЕСТ 6: СРАВНЕНИЕ МОДЕЛЕЙ
 // ============================================================================
-void test_model_comparison() {
+
+/**
+ * @brief Сравнение производительности фильтров на разных моделях
+ */
+void test_model_comparison()
+{
     std::cout << "\n=== TEST 6: MODEL COMPARISON ===\n";
-
-
     std::cout << "NOTE: Model 0 support needs to be added to DataGenerator.\n";
     std::cout << "Currently only Model 2 is supported.\n";
 
-    // Тест с Model 0
+    // Тест с Model 0 (упрощенная модель рыскания)
     {
+        std::cout << "\n--- Model 0 Test (Simplified Yaw Model) ---\n";
+
         data_generator::SimulationConfig config;
+        config.total_steps = 1000;
+        config.base_dt = 0.01;
+        config.add_process_noise = true;
+        config.add_measurement_noise = true;
         config.model_type = data_generator::ModelType::MODEL0;
         config.scenario.scenario0 = model0::ControlScenario::SINE_WAVE;
+        config.time_mode = time_generator::TimeMode::UNIFORM;
+        config.format = data_generator::DataFormat::TEXT_CSV;
+        config.use_custom_initial = false;
         config.output_dir = "./data/model0_test";
-        config.test_ckf = false;
-        run_test("Model 0 Test", config, 11111);
+        config.test_ckf = true;
+        config.seed = 11111;
+
+        run_test("Model 0 Test (Yaw Model)", config, config.seed);
     }
 
-    // Тест с Model 2
+    // Тест с Model 2 (модель крена)
     {
+        std::cout << "\n--- Model 2 Test (Roll Model) ---\n";
+
         data_generator::SimulationConfig config;
+        config.total_steps = 1000;
+        config.base_dt = 0.01;
+        config.add_process_noise = true;
+        config.add_measurement_noise = true;
         config.model_type = data_generator::ModelType::MODEL2;
         config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
+        config.time_mode = time_generator::TimeMode::UNIFORM;
+        config.format = data_generator::DataFormat::TEXT_CSV;
+        config.use_custom_initial = false;
         config.output_dir = "./data/model2_test";
-        config.test_ckf = false;
-        run_test("Model 2 Test", config, 22222);
+        config.test_ckf = true;
+        config.seed = 22222;
+
+        run_test("Model 2 Test (Roll Model)", config, config.seed);
     }
 }
 
 // ============================================================================
 // ТЕСТ 7: БАЗОВЫЙ ТЕСТ ДЛЯ БЫСТРОЙ ПРОВЕРКИ
 // ============================================================================
-void test_basic() {
-    std::cout << "\n=== TEST 8: WITH PROCESS AND MEASUREMENT NOISE ===\n";
 
+/**
+ * @brief Базовый тест для проверки работоспособности системы
+ */
+void test_basic()
+{
+    std::cout << "\n=== TEST 8: WITH PROCESS AND MEASUREMENT NOISE ===\n";
     data_generator::SimulationConfig config;
     config.total_steps = 100;  // Увеличим для статистики
     config.base_dt = 0.02;
@@ -467,11 +591,164 @@ void test_basic() {
     config.add_measurement_noise = true;
     config.process_noise_scale = 1.0;      // Стандартный масштаб
     config.measurement_noise_scale = 1.0;  // Стандартный масштаб
+    config.model_type = data_generator::ModelType::MODEL2;
     config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
     config.time_mode = time_generator::TimeMode::UNIFORM;
     config.format = data_generator::DataFormat::TEXT_TXT;
     config.output_dir = "./data/test_with_noise";
-    run_test("Test with Noise", config, 77777);
+    config.test_ckf = true;
+    config.use_custom_initial = true;
+    config.initial_state = Eigen::Vector2d::Zero();
+    config.initial_covariance << 0.1, 0.0,
+            0.0, 0.1;
+    config.seed = 12345;
+    run_test("Test with Noise", config, config.seed);
+}
+
+// ============================================================================
+// ТЕСТ 8: ПРОИЗВОДИТЕЛЬНОСТЬ (дополнительный тест)
+// ============================================================================
+
+/**
+ * @brief Тест производительности с измерением времени выполнения
+ */
+void test_performance() {
+    std::cout << "\n=== TEST 8: PERFORMANCE TEST ===\n";
+
+    const std::chrono::time_point<std::chrono::high_resolution_clock> start_time =
+            std::chrono::high_resolution_clock::now();
+
+    data_generator::SimulationConfig config;
+    config.total_steps = 5000;  // Большое количество шагов для теста производительности
+    config.base_dt = 0.01;
+    config.add_process_noise = true;
+    config.add_measurement_noise = true;
+    config.model_type = data_generator::ModelType::MODEL2;
+    config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
+    config.time_mode = time_generator::TimeMode::UNIFORM;
+    config.format = data_generator::DataFormat::BINARY;  // Самый быстрый формат
+    config.use_custom_initial = false;
+    config.output_dir = "./data/performance_test";
+    config.test_ckf = true;
+    config.seed = 88888;
+
+    try {
+        data_generator::DataGenerator gen(config, config.seed);
+        auto data = gen.generate();
+        gen.save(data);
+
+        const auto end_time = std::chrono::high_resolution_clock::now();
+        const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+        std::cout << "Performance results:\n";
+        std::cout << "  Steps processed: " << config.total_steps << "\n";
+        std::cout << "  Total time: " << duration.count() << " ms\n";
+        std::cout << "  Time per step: " << static_cast<double>(duration.count()) / config.total_steps << " ms\n";
+        std::cout << "  Data saved to: " << config.output_dir << "\n";
+
+    } catch (const std::exception& e) {
+        std::cout << "Performance test failed: " << e.what() << "\n";
+    }
+}
+
+// ============================================================================
+// ОСНОВНАЯ ФУНКЦИЯ С МЕНЮ ВЫБОРА
+// ============================================================================
+
+/**
+ * @brief Отображение меню выбора тестов
+ */
+void display_menu() {
+    std::cout << "\nSelect test series to run:\n";
+    std::cout << "1. All tests (comprehensive)\n";
+    std::cout << "2. Verhaegen noise tests only\n";
+    std::cout << "3. Format comparison tests\n";
+    std::cout << "4. Control scenario tests\n";
+    std::cout << "5. Time mode tests\n";
+    std::cout << "6. Model comparison tests\n";
+    std::cout << "7. Basic functionality test\n";
+    std::cout << "8. Performance test\n";
+    std::cout << "9. Custom test\n";
+    std::cout << "0. Exit\n";
+    std::cout << "Enter choice (0-9): ";
+}
+
+/**
+ * @brief Обработка пользовательского ввода для выбора теста
+ * @return int Выбор пользователя
+ */
+int get_user_choice() {
+    int choice = -1;
+    std::string input;
+
+    while (true) {
+        std::getline(std::cin, input);
+        std::stringstream ss(input);
+
+        if (ss >> choice && choice >= 0 && choice <= 9) {
+            return choice;
+        }
+
+        std::cout << "Invalid input. Please enter a number between 0 and 9: ";
+    }
+}
+
+/**
+ * @brief Создание пользовательской конфигурации теста
+ * @return data_generator::SimulationConfig Пользовательская конфигурация
+ */
+data_generator::SimulationConfig create_custom_config() {
+    data_generator::SimulationConfig config;
+
+    std::cout << "\n=== CUSTOM TEST CONFIGURATION ===\n";
+
+    // Количество шагов
+    std::cout << "Enter total steps (100-10000): ";
+    std::cin >> config.total_steps;
+    config.total_steps = std::max(100, std::min(10000, static_cast<int>(config.total_steps)));
+
+    // Шаг времени
+    std::cout << "Enter base dt (0.001-0.1): ";
+    std::cin >> config.base_dt;
+    config.base_dt = std::max(0.001, std::min(0.1, config.base_dt));
+
+    // Модель
+    std::cout << "Select model (0=MODEL0, 1=MODEL2): ";
+    int model_choice;
+    std::cin >> model_choice;
+    config.model_type = (model_choice == 0) ?
+                        data_generator::ModelType::MODEL0 : data_generator::ModelType::MODEL2;
+
+    // Сценарий
+    std::cout << "Select scenario (0=ZERO_HOLD, 1=STEP, 2=SINE, 3=PULSE): ";
+    int scenario_choice;
+    std::cin >> scenario_choice;
+
+    if (config.model_type == data_generator::ModelType::MODEL0) {
+        config.scenario.scenario0 = static_cast<model0::ControlScenario>(scenario_choice);
+    } else {
+        config.scenario.scenario2 = static_cast<model2::ControlScenario>(scenario_choice);
+    }
+
+    // Формат
+    std::cout << "Select format (0=BINARY, 1=CSV, 2=MATLAB, 3=TXT): ";
+    int format_choice;
+    std::cin >> format_choice;
+    config.format = static_cast<data_generator::DataFormat>(format_choice);
+
+    // Тестирование CKF
+    std::cout << "Test CKF filter? (0=No, 1=Yes): ";
+    int test_ckf_choice;
+    std::cin >> test_ckf_choice;
+    config.test_ckf = (test_ckf_choice != 0);
+
+    config.output_dir = "./data/custom_test";
+    config.seed = 42;
+
+    // Очистка буфера ввода
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    return config;
 }
 
 // ============================================================================
@@ -479,91 +756,89 @@ void test_basic() {
 // ============================================================================
 int main() {
     std::cout << "========================================\n";
-    std::cout << "   KALMAN FILTER TEST SUITE\n";
+    std::cout << "   KALMAN FILTER COMPARISON SUITE\n";
     std::cout << "   Based on Verhaegen & Van Dooren (1986)\n";
+    std::cout << "   Version 2.0\n";
     std::cout << "========================================\n\n";
 
     // Создаем корневую директорию для данных
     std::filesystem::create_directories("./data");
-    generate_all_formats();
-    test_txt_format();
+//    generate_all_formats();
+//    test_txt_format();
 
     // Выбор тестов для запуска
     int choice;
-    std::cout << "Select test series to run:\n";
-    std::cout << "1. All tests (comprehensive)\n";
-    std::cout << "2. Verhaegen noise tests only\n";
-    std::cout << "3. Format comparison tests\n";
-    std::cout << "4. Basic functionality test\n";
-    std::cout << "5. Test model comparison\n";
-    std::cout << "6. Custom test\n";
-    std::cout << "Enter choice (1-6): ";
-    std::cin >> choice;
+    bool exit_program = false;
 
-    switch (choice) {
-        case 1:  // Все тесты
-            std::cout << "\nRunning all test series...\n";
-            test_basic();
-            run_verhaegen_tests();
-            test_different_formats();
-            test_different_scenarios();
-            test_different_time_modes();
-            test_unstable_system();
-            test_model_comparison();
-            break;
+    while (!exit_program) {
+        display_menu();
+        choice = get_user_choice();
 
-        case 2:  // Только тесты Verhaegen
-            std::cout << "\nRunning Verhaegen noise tests...\n";
-            run_verhaegen_tests();
-            break;
+        switch (choice) {
+            case 0:  // Выход
+                exit_program = true;
+                break;
 
-        case 3:  // Тесты форматов
-            std::cout << "\nRunning format comparison tests...\n";
-            test_different_formats();
-            break;
+            case 1:  // Все тесты
+                std::cout << "\nRunning all test series...\n";
+                test_basic();
+                run_verhaegen_tests();
+                test_different_formats();
+                test_different_scenarios();
+                test_different_time_modes();
+                test_unstable_system();
+                test_model_comparison();
+                test_performance();
+                break;
 
-        case 4:  // Базовый тест
-            std::cout << "\nRunning basic functionality test...\n";
-            test_basic();
-            break;
+            case 2:  // Тесты Verhaegen
+                std::cout << "\nRunning Verhaegen noise tests...\n";
+                run_verhaegen_tests();
+                break;
 
-        case 5:  // Сравнение 2-х моделей на одном фильтре
-            std::cout << "\nComparing models test...\n";
-            test_model_comparison();
-            break;
+            case 3:  // Тесты форматов
+                std::cout << "\nRunning format comparison tests...\n";
+                test_different_formats();
+                break;
 
-        case 6:  // Пользовательский тест
-        {
-            std::cout << "\nRunning custom test...\n";
-            data_generator::SimulationConfig config;
+            case 4:  // Тесты сценариев
+                std::cout << "\nRunning control scenario tests...\n";
+                test_different_scenarios();
+                break;
 
-            // Настройка параметров
-            std::cout << "Enter total steps: ";
-            std::cin >> config.total_steps;
+            case 5:  // Тесты режимов времени
+                std::cout << "\nRunning time mode tests...\n";
+                test_different_time_modes();
+                break;
 
-            std::cout << "Enter base dt: ";
-            std::cin >> config.base_dt;
+            case 6:  // Сравнение моделей
+                std::cout << "\nRunning model comparison tests...\n";
+                test_model_comparison();
+                break;
 
-            std::cout << "Select scenario (0=ZERO_HOLD, 1=STEP, 2=SINE, 3=PULSE): ";
-            int scenario;
-            std::cin >> scenario;
-            config.scenario.scenario2 = static_cast<model2::ControlScenario>(scenario);
+            case 7:  // Базовый тест
+                std::cout << "\nRunning basic functionality test...\n";
+                test_basic();
+                break;
 
-            std::cout << "Select format (0=BINARY, 1=CSV, 2=MATLAB, 3=TXT): ";
-            int format;
-            std::cin >> format;
-            config.format = static_cast<data_generator::DataFormat>(format);
+            case 8:  // Тест производительности
+                std::cout << "\nRunning performance test...\n";
+                test_performance();
+                break;
 
-            config.output_dir = "./data/custom_test";
-
-            run_test("Custom Test", config, 88888);
+            case 9:  // Пользовательский тест
+            {
+                std::cout << "\nRunning custom test...\n";
+                data_generator::SimulationConfig config = create_custom_config();
+                run_test("Custom Test", config, 88888);
+            }
+                break;
         }
-            break;
 
-        default:
-            std::cout << "Invalid choice. Running basic test...\n";
-            test_basic();
-            break;
+        if (!exit_program) {
+            std::cout << "\nPress Enter to continue...";
+            std::cin.get();
+        }
     }
 
     // Отчет о завершении
@@ -577,6 +852,7 @@ int main() {
     std::cout << "  • Performance metrics\n";
     std::cout << "  • Comparison CSV files\n";
     std::cout << "  • Verhaegen-style analysis results\n";
+    std::cout << "\nThank you for using Kalman Filter Comparison Suite!\n";
 
     return 0;
 }

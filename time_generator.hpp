@@ -3,7 +3,7 @@
  * @brief Генератор временных меток для фильтра Калмана
  * @author FAST_DEVELOPMENT (NORREYLL)
  * @date 2025
- * @version 1.0
+ * @version 2.0
  *
  * @copyright MIT License
  *

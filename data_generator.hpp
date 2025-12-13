@@ -15,6 +15,8 @@
 #ifndef DATA_GENERATOR_HPP
 #define DATA_GENERATOR_HPP
 
+#pragma once
+
 #include <utility>
 #include <vector>
 #include <string>
@@ -58,6 +60,7 @@ namespace data_generator {
      * @brief Конфигурация симуляции
      */
     struct SimulationConfig {
+        int seed = 0;  /**< Начальный seed модели */
         size_t total_steps = 1000;                 /**< Общее количество шагов симуляции */
         double base_dt = 0.01;                     /**< Базовый шаг по времени (секунды) */
         bool add_process_noise = true;             /**< Добавлять шум процесса */
@@ -70,12 +73,13 @@ namespace data_generator {
             model0::ControlScenario scenario0;     /**< Сценарий управления для MODEL0 */
             model2::ControlScenario scenario2;     /**< Сценарий управления для MODEL2 */
         } scenario;
-
-//        model2::ControlScenario scenario = model2::ControlScenario::SINE_WAVE;
         time_generator::TimeMode time_mode = time_generator::TimeMode::RANDOM_JITTER; /**< Режим генерации времени */
         DataFormat format = DataFormat::BINARY;    /**< Формат сохранения данных */
         std::string output_dir = "./data";         /**< Директория для выходных данных */
         bool test_ckf = true;                      /**< Тестировать ли CKF фильтр */
+        Eigen::VectorXd initial_state = Eigen::Vector2d::Zero();     /**< Начальное состояние системы */
+        Eigen::MatrixXd initial_covariance = Eigen::Matrix2d::Identity() * 0.1; /**< Начальная ковариация */
+        bool use_custom_initial = false;                            /**< Использовать ли кастомные начальные условия */
     };
 
     /**
@@ -153,7 +157,8 @@ namespace data_generator {
          * @brief Валидация конфигурации симуляции
          * @exception std::invalid_argument Если конфигурация некорректна
          */
-        void validateConfig() const {
+        void validateConfig() const
+        {
             if (config_.total_steps == 0) {
                 throw std::invalid_argument("total_steps must be > 0");
             }
@@ -172,7 +177,8 @@ namespace data_generator {
          * @brief Запись сообщения в лог
          * @param message Сообщение для записи
          */
-        void log(const std::string& message) {
+        void log(const std::string& message)
+        {
             if (!log_file_.is_open()) {
                 log_file_.open(config_.output_dir + "/simulation.log");
             }
@@ -185,21 +191,32 @@ namespace data_generator {
          * @param config Конфигурация симуляции
          * @param seed Начальное значение для генератора случайных чисел
          */
-        explicit DataGenerator(SimulationConfig  config, int seed = 42)
+        explicit DataGenerator(SimulationConfig config, int seed = 42)
                 : config_(std::move(config)), time_gen_(seed)
         {
             validateConfig();
             std::filesystem::create_directories(config_.output_dir);
+            // Сброс всех генераторов шумов
+            kalman_noise::reset_noise_generators(seed);
+
+            // В зависимости от модели сбрасываем соответствующий генератор
+            if (config_.model_type == ModelType::MODEL0) {
+                model0::reset_noise_with_seed(seed);
+            } else if (config_.model_type == ModelType::MODEL2) {
+                model2::reset_noise_with_seed(seed);
+            }
             log("[DataGenerator] Initialized with configuration:");
             log("  total_steps = " + std::to_string(config_.total_steps));
             log("  base_dt = " + std::to_string(config_.base_dt));
             log("  output_dir = " + config_.output_dir);
+            log("  seed = " + std::to_string(seed));
         }
 
         /**
          * @brief Деструктор (закрывает лог-файл)
          */
-        ~DataGenerator() {
+        ~DataGenerator()
+        {
             if (log_file_.is_open()) {
                 log("[DataGenerator] Simulation completed");
                 log_file_.close();
@@ -301,20 +318,35 @@ namespace data_generator {
          * @brief Генерация данных с использованием MODEL0
          * @param data Структура для хранения данных
          */
-        void generate_with_model0(SimulationData& data) {
+        void generate_with_model0(SimulationData& data)
+        {
             log("[DataGenerator] Generating with MODEL0");
-            // Инициализация фильтров
-            model0::reset_noise();
 
+            Eigen::Vector2d x_true;
             Eigen::Matrix2d P0;
-            P0 << 0.1, 0.0,
-                    0.0, 0.1;
 
-            Eigen::Vector2d x_true = Eigen::Vector2d::Zero();
+            if (config_.use_custom_initial) {
+                // Используем пользовательские начальные условия
+                x_true = config_.initial_state;
+                P0 = config_.initial_covariance;
+                log("[MODEL0] Using custom initial conditions:");
+            } else {
+                // Используем стандартные начальные условия
+                x_true = Eigen::Vector2d::Zero();
+                P0 << 0.1, 0.0,
+                        0.0, 0.1;
+                log("[MODEL0] Using default initial conditions:");
+            }
+
+            log("[MODEL0] Initial state: x_true = ["
+                + std::to_string(x_true(0)) + ", " + std::to_string(x_true(1)) + "]");
+            log("[MODEL0] Initial covariance: P0 = [["
+                + std::to_string(P0(0,0)) + ", " + std::to_string(P0(0,1)) + "], ["
+                + std::to_string(P0(1,0)) + ", " + std::to_string(P0(1,1)) + "]]");
 
             // Подготовка фильтров
-            kalman::CKF ckf(Eigen::Vector2d::Zero(), P0);
-            kalman::SRCF srcf(Eigen::Vector2d::Zero(), P0);
+            kalman::CKF ckf(x_true, P0);
+            kalman::SRCF srcf(x_true, P0);
 
             log("[MODEL0] Initial state: x_true = [0, 0]");
             log("[MODEL0] Initial covariance: P0 = diag(0.1, 0.1)");
@@ -384,21 +416,30 @@ namespace data_generator {
         void generate_with_model2(SimulationData& data)
         {
             log("[DataGenerator] Generating with MODEL2");
-            // Инициализация фильтров
-            model2::reset_noise();
 
+            Eigen::Vector2d x_true;
             Eigen::Matrix2d P0;
-            P0 << 0.1, 0.0,
-                    0.0, 0.01;
 
-            Eigen::Vector2d x_true = Eigen::Vector2d::Zero();
+            if (config_.use_custom_initial) {
+                x_true = config_.initial_state;
+                P0 = config_.initial_covariance;
+                log("[MODEL2] Using custom initial conditions:");
+            } else {
+                x_true = Eigen::Vector2d::Zero();
+                P0 << 0.1, 0.0,
+                        0.0, 0.01;
+                log("[MODEL2] Using default initial conditions:");
+            }
+
+            log("[MODEL2] Initial state: x_true = ["
+                + std::to_string(x_true(0)) + ", " + std::to_string(x_true(1)) + "]");
+            log("[MODEL2] Initial covariance: P0 = [["
+                + std::to_string(P0(0,0)) + ", " + std::to_string(P0(0,1)) + "], ["
+                + std::to_string(P0(1,0)) + ", " + std::to_string(P0(1,1)) + "]]");
 
             // Подготовка фильтров
-            kalman::CKF ckf(Eigen::Vector2d::Zero(), P0);
-            kalman::SRCF srcf(Eigen::Vector2d::Zero(), P0);
-
-            log("[MODEL2] Initial state: x_true = [0, 0]");
-            log("[MODEL2] Initial covariance: P0 = [[0.1, 0], [0, 0.01]]");
+            kalman::CKF ckf(x_true, P0);
+            kalman::SRCF srcf(x_true, P0);
 
             // Главный цикл симуляции
             for (size_t k = 0; k < data.times.size() - 1; ++k) {
