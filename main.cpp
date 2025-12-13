@@ -228,10 +228,12 @@ void run_test(const std::string& test_name,
 
     // Создаем директорию
     std::filesystem::create_directories(config.output_dir);
+    data_generator::SimulationConfig local_config = config;
+    local_config.seed = seed;
 
     try {
         // Генерируем данные
-        data_generator::DataGenerator gen(config, seed);
+        data_generator::DataGenerator gen(local_config, seed);
         auto data = gen.generate();
 
         // Сохраняем данные

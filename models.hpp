@@ -61,7 +61,7 @@ namespace kalman_noise
          * @param seed Начальное значение для генератора случайных чисел
          */
         explicit NoiseGenerator(int seed = std::random_device{}())
-            : generator(seed), distribution(0.0, 1.0) {}
+                : generator(seed), distribution(0.0, 1.0) {}
 
         /**
         * @brief Генерация скалярного гауссовского шума
@@ -190,17 +190,21 @@ namespace model0
     };
 
     // Thread-local состояние
-    thread_local NoiseState noise_state(42);
+    NoiseState& get_noise_state() {
+        static thread_local NoiseState noise_state(42);  // Только для инициализации по умолчанию
+        return noise_state;
+    }
 
     void reset_noise_with_seed(int seed) {
-        noise_state.reset(seed);
+        get_noise_state().reset(seed);
     }
 
     double generate_correlated_noise() {
-        double xi = noise_state.distribution(noise_state.generator);
-        noise_state.last_w = noise_state.alpha * noise_state.last_w +
-                             sigma_w * std::sqrt(1.0 - noise_state.alpha * noise_state.alpha) * xi;
-        return noise_state.last_w;
+        auto& state = get_noise_state();
+        double xi = state.distribution(state.generator);
+        state.last_w = state.alpha * state.last_w +
+                       sigma_w * std::sqrt(1.0 - state.alpha * state.alpha) * xi;
+        return state.last_w;
     }
 
     /**
@@ -546,17 +550,21 @@ namespace model2
     };
 
     // Thread-local состояние
-    thread_local NoiseState noise_state(42);
+    NoiseState& get_noise_state() {
+        static thread_local NoiseState noise_state(42);  // Только для инициализации по умолчанию
+        return noise_state;
+    }
 
     void reset_noise_with_seed(int seed) {
-        noise_state.reset(seed);
+        get_noise_state().reset(seed);
     }
 
     double generate_correlated_noise() {
-        double xi = noise_state.distribution(noise_state.generator);
-        noise_state.last_w = noise_state.alpha * noise_state.last_w +
-                             sigma_w * std::sqrt(1.0 - noise_state.alpha * noise_state.alpha) * xi;
-        return noise_state.last_w;
+        auto& state = get_noise_state();
+        double xi = state.distribution(state.generator);
+        state.last_w = state.alpha * state.last_w +
+                       sigma_w * std::sqrt(1.0 - state.alpha * state.alpha) * xi;
+        return state.last_w;
     }
 
     /**
@@ -642,7 +650,7 @@ namespace model2
     {
         Eigen::Matrix2d A = Eigen::Matrix2d::Zero(2, 2);
         A << 0, 1,
-            -L_phi, -L_p;
+                -L_phi, -L_p;
         return A;
     }
 

@@ -192,11 +192,15 @@ namespace data_generator {
          * @param seed Начальное значение для генератора случайных чисел
          */
         explicit DataGenerator(SimulationConfig config, int seed = 42)
-                : config_(std::move(config)), time_gen_(seed)
+                : config_(std::move(config)), time_gen_(seed)  // Передаем seed в time_gen_
         {
             validateConfig();
             std::filesystem::create_directories(config_.output_dir);
-            // Сброс всех генераторов шумов
+
+            // ЛОГИРОВАНИЕ seed
+            std::cout << "[DataGenerator] Setting seed: " << seed << std::endl;
+
+            // 1. Сброс всех генераторов шума
             kalman_noise::reset_noise_generators(seed);
 
             // В зависимости от модели сбрасываем соответствующий генератор
@@ -529,10 +533,10 @@ namespace data_generator {
          * @param metrics Структура для сохранения метрик
          */
         static void calculate_filter_metrics(const std::vector<Eigen::Vector2d>& true_states,
-                                      const std::vector<Eigen::Vector2d>& estimates,
-                                      const std::vector<Eigen::Matrix2d>& covariances,
-                                      const std::vector<double>& times,
-                                      SimulationData::FilterMetrics& metrics)
+                                             const std::vector<Eigen::Vector2d>& estimates,
+                                             const std::vector<Eigen::Matrix2d>& covariances,
+                                             const std::vector<double>& times,
+                                             SimulationData::FilterMetrics& metrics)
         {
             const size_t n = true_states.size();
             if (n == 0) return;
@@ -628,7 +632,7 @@ namespace data_generator {
 
                 // Относительная разница в процентах
                 const double rel_diff = (ckf_error > 1e-10) ?
-                                  (diff / ckf_error) * 100.0 : 0.0;
+                                        (diff / ckf_error) * 100.0 : 0.0;
                 data.comparison.relative_differences.push_back(rel_diff);
 
                 sum_diff += diff;

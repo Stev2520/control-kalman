@@ -1,18 +1,4 @@
-/**
- * @file srcf.cpp
- * @brief Реализация квадратно-корневого фильтра Калмана (SRCF)
- * @author FAST_DEVELOPMENT (NORREYLL)
- * @date 2025
- * @version 2.0
- *
- * @copyright MIT License
- *
- * @note Использует QR-разложение для поддержания численной устойчивости
- *       и положительной определенности матрицы ковариации.
- */
-
 #include <iostream>
-#include <utility>
 #include "kalman.hpp"
 
 using namespace kalman;
@@ -148,10 +134,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
                 const Eigen::MatrixXd &Q, const Eigen::MatrixXd &R,
                 const Eigen::VectorXd &u, const Eigen::VectorXd &y)
 {
-    // ============================================
-    // ВАЛИДАЦИЯ ВХОДНЫХ ДАННЫХ
-    // ============================================
-    std::cout << "\n=== SRCF Step (Square-Root Covariance Filter) ===" << std::endl;
+    std::cout << "\n=== Manual SRCF Step ===\n";
     std::cout << "A_matrix: " << A << "\n";
     std::cout << "B_matrix: " << B << "\n";
     std::cout << "C_matrix: " << C << "\n";
@@ -240,7 +223,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         S_ = Eigen::MatrixXd::Identity(nx, nx) * 0.1;
     }
 
-    // ============================================
+    /// ============================================
     // ФОРМИРОВАНИЕ ПРЕАРРЕЯ ДЛЯ QR-РАЗЛОЖЕНИЯ
     // ============================================
     std::cout << "\n--- Building Prearray for QR Decomposition ---" << std::endl;
@@ -292,23 +275,29 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     try {
         Eigen::HouseholderQR<Eigen::MatrixXd> qr(prearray.transpose());
         R_mat = qr.matrixQR().template triangularView<Eigen::Upper>();
-        if (R_mat.rows() > nx + ny) {
-            R_mat = R_mat.topLeftCorner(nx + ny, nx + ny);
-        }
         std::cout << "R_mat (" << R_mat.rows() << "x" << R_mat.cols() << "):\n" << R_mat << "\n";
         Q_mat = qr.matrixQR().template triangularView<Eigen::Lower>();
         std::cout << "Q_mat (" << Q_mat.rows() << "x" << Q_mat.cols() << "):\n" << Q_mat << "\n";
     } catch (const std::exception& e) {
         std::cerr << "ERROR in QR decomposition: " << e.what() << std::endl;
-        throw std::runtime_error("SRCF::step: Failed QR decomposition");
+        return;
     }
 
     if (!R_mat.allFinite()) {
-        throw std::runtime_error("SRCF::step: R_mat contains NaN/Inf after QR");
+        std::cerr << "ERROR: R_mat contains NaN/Inf after QR!" << std::endl;
+        return;
     }
 
     if (!Q_mat.allFinite()) {
-        throw std::runtime_error("SRCF::step: Q_mat contains NaN/Inf after QR");
+        std::cerr << "ERROR: Q_mat contains NaN/Inf after QR!" << std::endl;
+        return;
+    }
+
+    // Берем первые (p+n) строк
+    if (R_mat.rows() < ny + nx || R_mat.cols() < ny + nx) {
+        std::cerr << "ERROR: R_mat too small: " << R_mat.rows() << "x" << R_mat.cols()
+                  << " (need at least " << ny + nx << "x" << ny + nx << ")" << std::endl;
+        return;
     }
 
     // ============================================
@@ -317,7 +306,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     std::cout << "\n--- Extracting Postarray Blocks ---" << std::endl;
 
     // Извлечение постаррея (транспонирование R)
-    Eigen::MatrixXd postarray = -R_mat.transpose();
+    Eigen::MatrixXd postarray = -R_mat.topLeftCorner(nx + ny, nx + ny).transpose();
     std::cout << "\nPostarray (" << postarray.rows() << "x" << postarray.cols() << "):\n" << postarray << "\n";
 
     if (!postarray.allFinite()) {

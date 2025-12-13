@@ -58,6 +58,7 @@ namespace time_generator {
         std::default_random_engine gen_;                 /**< Генератор случайных чисел */
         std::uniform_real_distribution<double> uniform_dist_; /**< Равномерное распределение */
         std::normal_distribution<double> normal_dist_;   /**< Нормальное распределение */
+        int current_seed_;
 
     public:
         /**
@@ -74,10 +75,9 @@ namespace time_generator {
          *       стандартным отклонением 0.005.
          */
         explicit TimeGenerator(int seed = std::random_device{}())
-                : gen_(seed)
-                , uniform_dist_(0.001, 0.05)  // Шаг от 1мс до 50мс
-                , normal_dist_(0.0, 0.005)    // Случайные отклонения
-        {}
+                : gen_(seed), current_seed_(seed)  // Сохраняем seed
+                , uniform_dist_(0.001, 0.05)
+                , normal_dist_(0.0, 0.005) {}
 
         /**
          * @brief Генерирует временную сетку
@@ -199,6 +199,15 @@ namespace time_generator {
             }
             return times;
         }
+
+        void reset(int seed) {
+            gen_.seed(seed);
+            current_seed_ = seed;
+            uniform_dist_.reset();
+            normal_dist_.reset();
+        }
+
+        int get_current_seed() const { return current_seed_; }
     };
 } // namespace time_generator
 
