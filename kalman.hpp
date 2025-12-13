@@ -187,7 +187,7 @@ public:
      *
      * @note Матрица P0 разлагается на квадратный корень: S₀ = chol(P₀)
      */
-    SRCF(const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0);
+    SRCF(Eigen::VectorXd x0, const Eigen::MatrixXd &P0);
 
     /**
      * @brief Инициализация фильтра
@@ -252,7 +252,8 @@ public:
      *       диагональную матрицу с малыми значениями для предотвращения
      *       сбоев в вызывающем коде.
      */
-    [[nodiscard]] Eigen::MatrixXd covariance() const {
+    [[nodiscard]] Eigen::MatrixXd covariance() const
+    {
         try {
             Eigen::MatrixXd P = S_ * S_.transpose();
             if (!P.allFinite()) {

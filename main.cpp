@@ -471,9 +471,7 @@ void test_basic() {
     config.time_mode = time_generator::TimeMode::UNIFORM;
     config.format = data_generator::DataFormat::TEXT_TXT;
     config.output_dir = "./data/test_with_noise";
-
     run_test("Test with Noise", config, 77777);
-
 }
 
 // ============================================================================

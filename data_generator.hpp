@@ -1,6 +1,21 @@
+/**
+ * @file data_generator.hpp
+ * @brief Генератор данных для сравнения фильтров Калмана
+ * @author FAST_DEVELOPMENT (NORREYLL)
+ * @date 2025
+ * @version 2.0
+ *
+ * @copyright MIT License
+ *
+ * @note Данный модуль реализует генерацию данных для сравнения
+ *       классического (CKF) и квадратно-корневого (SRCF) фильтров Калмана.
+ *       Включает различные модели систем, режимы времени и форматы вывода.
+ */
+
 #ifndef DATA_GENERATOR_HPP
 #define DATA_GENERATOR_HPP
 
+#include <utility>
 #include <vector>
 #include <string>
 #include <fstream>
@@ -16,103 +31,147 @@
 
 namespace data_generator {
 // ============================================================================
-// 1. КОНФИГУРАЦИЯ И ДАННЫЕ
+// КОНФИГУРАЦИЯ И ДАННЫЕ
 // ============================================================================
+    /**
+    * @enum DataFormat
+    * @brief Форматы сохранения данных
+    */
     enum class DataFormat {
-        BINARY,      // Бинарный формат для скорости
-        TEXT_CSV,    // Текстовый CSV для удобства
-        TEXT_MATLAB, // Текстовый формат MATLAB
-        TEXT_TXT     // Простой TXT формат
+        BINARY,      /**< Бинарный формат для скорости и компактности */
+        TEXT_CSV,    /**< Текстовый CSV для удобства чтения */
+        TEXT_MATLAB, /**< Текстовый формат совместимый с MATLAB */
+        TEXT_TXT     /**< Простой TXT формат с форматированием */
     };
 
+    /**
+     * @enum ModelType
+     * @brief Типы моделей для генерации данных
+     */
     enum class ModelType {
-        MODEL0,  // Модель рыскания самолета
-        MODEL2   // Модель крена самолета
+        MODEL0,  /**< Модель рыскания самолета */
+        MODEL2   /**< Модель крена самолета */
     };
 
+    /**
+     * @struct SimulationConfig
+     * @brief Конфигурация симуляции
+     */
     struct SimulationConfig {
-        size_t total_steps = 1000;
-        double base_dt = 0.01;
-        bool add_process_noise = true;
-        bool add_measurement_noise = true;
-        double process_noise_scale = 1.0;
-        double measurement_noise_scale = 1.0;
+        size_t total_steps = 1000;                 /**< Общее количество шагов симуляции */
+        double base_dt = 0.01;                     /**< Базовый шаг по времени (секунды) */
+        bool add_process_noise = true;             /**< Добавлять шум процесса */
+        bool add_measurement_noise = true;         /**< Добавлять шум измерений */
+        double process_noise_scale = 1.0;          /**< Масштаб шума процесса */
+        double measurement_noise_scale = 1.0;      /**< Масштаб шума измерений */
 
-        ModelType model_type = ModelType::MODEL2;
+        ModelType model_type = ModelType::MODEL2;  /**< Тип используемой модели */
         union {
-            model0::ControlScenario scenario0;
-            model2::ControlScenario scenario2;
+            model0::ControlScenario scenario0;     /**< Сценарий управления для MODEL0 */
+            model2::ControlScenario scenario2;     /**< Сценарий управления для MODEL2 */
         } scenario;
 
 //        model2::ControlScenario scenario = model2::ControlScenario::SINE_WAVE;
-        time_generator::TimeMode time_mode = time_generator::TimeMode::RANDOM_JITTER;
-        DataFormat format = DataFormat::BINARY;
-        std::string output_dir = "./data";
-        bool test_ckf = true;
+        time_generator::TimeMode time_mode = time_generator::TimeMode::RANDOM_JITTER; /**< Режим генерации времени */
+        DataFormat format = DataFormat::BINARY;    /**< Формат сохранения данных */
+        std::string output_dir = "./data";         /**< Директория для выходных данных */
+        bool test_ckf = true;                      /**< Тестировать ли CKF фильтр */
     };
 
+    /**
+     * @struct SimulationData
+     * @brief Структура для хранения всех данных симуляции
+     */
     struct SimulationData {
-        std::vector<double> times;
-        std::vector<Eigen::Vector2d> true_states;
-        std::vector<Eigen::Vector2d> measurements;
-        std::vector<Eigen::Vector2d> noisy_measurements;
-        std::vector<Eigen::VectorXd> controls;
-        std::vector<Eigen::Vector2d> ckf_estimates;
-        std::vector<Eigen::Vector2d> srcf_estimates;
-        std::vector<Eigen::Matrix2d> ckf_covariances;
-        std::vector<Eigen::Matrix2d> srcf_covariances;
+        std::vector<double> times;                             /**< Временные метки */
+        std::vector<Eigen::Vector2d> true_states;              /**< Истинные состояния */
+        std::vector<Eigen::Vector2d> measurements;             /**< Точные измерения */
+        std::vector<Eigen::Vector2d> noisy_measurements;       /**< Зашумленные измерения */
+        std::vector<Eigen::VectorXd> controls;                 /**< Векторы управления */
+        std::vector<Eigen::Vector2d> ckf_estimates;            /**< Оценки CKF */
+        std::vector<Eigen::Vector2d> srcf_estimates;           /**< Оценки SRCF */
+        std::vector<Eigen::Matrix2d> ckf_covariances;          /**< Ковариации CKF */
+        std::vector<Eigen::Matrix2d> srcf_covariances;         /**< Ковариации SRCF */
 
+        /**
+         * @struct FilterMetrics
+         * @brief Метрики производительности фильтра
+         */
         struct FilterMetrics {
-            double average_error = 0.0;
-            double max_error = 0.0;
-            double rms_error = 0.0;
-            double convergence_time = 0.0;
-            double cov_norm = 0.0;      // норма ковариации
-            double cond_number = 0.0;   // число обусловленности
-            double symmetry_error = 0.0; // асимметрия ковариации
-            std::vector<double> error_history;
+            double average_error = 0.0;        /**< Средняя ошибка оценки */
+            double max_error = 0.0;            /**< Максимальная ошибка оценки */
+            double rms_error = 0.0;            /**< RMS ошибка оценки */
+            double convergence_time = 0.0;     /**< Время сходимости (секунды) */
+            double cov_norm = 0.0;             /**< Норма ковариации */
+            double cond_number = 0.0;          /**< Число обусловленности ковариации */
+            double symmetry_error = 0.0;       /**< Асимметрия ковариации */
+            std::vector<double> error_history; /**< История ошибок на каждом шаге */
         };
 
-        FilterMetrics ckf_metrics;
-        FilterMetrics srcf_metrics;
+        FilterMetrics ckf_metrics;  /**< Метрики для CKF */
+        FilterMetrics srcf_metrics; /**< Метрики для SRCF */
 
-        // Дополнительные метрики для сравнения
+        /**
+         * @struct ComparisonMetrics
+         * @brief Метрики сравнения двух фильтров
+         */
         struct ComparisonMetrics {
-            double avg_error_ratio = 0.0;          // SRCF/CKF
-            double rms_error_ratio = 0.0;          // SRCF/CKF
-            double max_error_ratio = 0.0;          // SRCF/CKF
-            double cond_number_ratio = 0.0;        // SRCF/CKF
-            double cov_norm_ratio = 0.0;           // SRCF/CKF
-            double max_srcf_minus_ckf = 0.0;       // Максимальная SRCF - CKF
-            double max_ckf_minus_srcf = 0.0;       // Максимальная CKF - SRCF
-            double avg_absolute_difference = 0.0;  // Средняя абсолютная разница
-            double std_dev_difference = 0.0;       // Стандартное отклонение разницы
-            double percentage_srcf_better = 0.0;   // Процент шагов, где SRCF лучше
-            std::vector<double> error_differences; // Разности ошибок (SRCF - CKF)
-            std::vector<double> relative_differences; // Относительные разности
+            double avg_error_ratio = 0.0;          /**< Отношение средних ошибок (SRCF/CKF) */
+            double rms_error_ratio = 0.0;          /**< Отношение RMS ошибок (SRCF/CKF) */
+            double max_error_ratio = 0.0;          /**< Отношение макс. ошибок (SRCF/CKF) */
+            double cond_number_ratio = 0.0;        /**< Отношение чисел обусловленности (SRCF/CKF) */
+            double cov_norm_ratio = 0.0;           /**< Отношение норм ковариаций (SRCF/CKF) */
+            double max_srcf_minus_ckf = 0.0;       /**< Максимальная разница ошибок (SRCF - CKF) */
+            double max_ckf_minus_srcf = 0.0;       /**< Максимальная разница ошибок (CKF - SRCF) */
+            double avg_absolute_difference = 0.0;  /**< Средняя абсолютная разница ошибок */
+            double std_dev_difference = 0.0;       /**< Стандартное отклонение разницы ошибок */
+            double percentage_srcf_better = 0.0;   /**< Процент шагов, где SRCF лучше */
+            std::vector<double> error_differences; /**< Разности ошибок на каждом шаге (SRCF - CKF) */
+            std::vector<double> relative_differences; /**< Относительные разности ошибок (%) */
         };
 
-        ComparisonMetrics comparison;
+        ComparisonMetrics comparison; /**< Метрики сравнения фильтров */
     };
 // ============================================================================
-// 2. ГЕНЕРАТОР ДАННЫХ
+// КЛАСС ГЕНЕРАТОРА ДАННЫХ
 // ============================================================================
 
+    /**
+     * @class DataGenerator
+     * @brief Генератор данных для сравнения фильтров Калмана
+     *
+     * @note Класс реализует генерацию данных, симуляцию фильтров,
+     *       расчет метрик и сохранение результатов в различных форматах.
+     */
     class DataGenerator {
     private:
-        SimulationConfig config_;
-        time_generator::TimeGenerator time_gen_;
-        std::ofstream log_file_;
+        SimulationConfig config_;                     /**< Конфигурация симуляции */
+        time_generator::TimeGenerator time_gen_;      /**< Генератор временной сетки */
+        std::ofstream log_file_;                      /**< Файл журнала */
 
-        void validateConfig() {
+        /**
+         * @brief Валидация конфигурации симуляции
+         * @exception std::invalid_argument Если конфигурация некорректна
+         */
+        void validateConfig() const {
             if (config_.total_steps == 0) {
                 throw std::invalid_argument("total_steps must be > 0");
             }
             if (config_.base_dt <= 0) {
                 throw std::invalid_argument("base_dt must be > 0");
             }
+            if (config_.process_noise_scale < 0.0) {
+                throw std::invalid_argument("process_noise_scale must be >= 0");
+            }
+            if (config_.measurement_noise_scale < 0.0) {
+                throw std::invalid_argument("measurement_noise_scale must be >= 0");
+            }
         }
 
+        /**
+         * @brief Запись сообщения в лог
+         * @param message Сообщение для записи
+         */
         void log(const std::string& message) {
             if (!log_file_.is_open()) {
                 log_file_.open(config_.output_dir + "/simulation.log");
@@ -121,15 +180,39 @@ namespace data_generator {
         }
 
     public:
-        DataGenerator(const SimulationConfig& config, int seed = 42)
-                : config_(config), time_gen_(seed)
+        /**
+         * @brief Конструктор генератора данных
+         * @param config Конфигурация симуляции
+         * @param seed Начальное значение для генератора случайных чисел
+         */
+        explicit DataGenerator(SimulationConfig  config, int seed = 42)
+                : config_(std::move(config)), time_gen_(seed)
         {
             validateConfig();
-            std::string command;
             std::filesystem::create_directories(config_.output_dir);
+            log("[DataGenerator] Initialized with configuration:");
+            log("  total_steps = " + std::to_string(config_.total_steps));
+            log("  base_dt = " + std::to_string(config_.base_dt));
+            log("  output_dir = " + config_.output_dir);
         }
 
-        SimulationData generate() {
+        /**
+         * @brief Деструктор (закрывает лог-файл)
+         */
+        ~DataGenerator() {
+            if (log_file_.is_open()) {
+                log("[DataGenerator] Simulation completed");
+                log_file_.close();
+            }
+        }
+
+        /**
+         * @brief Генерация данных симуляции
+         * @return SimulationData Сгенерированные данные
+         */
+        SimulationData generate()
+        {
+            log("[DataGenerator] Starting data generation");
             SimulationData data;
 
             // Генерация временной сетки
@@ -137,10 +220,24 @@ namespace data_generator {
                                             config_.base_dt,
                                             config_.time_mode);
             std::string timegrid_file = config_.output_dir + "/timegrid.bin";
-            time_gen_.saveToFile(data.times, timegrid_file);
-            std::vector<double> time_check = time_gen_.loadFromFile(timegrid_file);
+            time_generator::TimeGenerator::saveToFile(data.times, timegrid_file);
 
-            // Выбор модели
+            // Проверка загрузки временной сетки
+            try {
+                std::vector<double> time_check = time_generator::TimeGenerator::loadFromFile(timegrid_file);
+                if (time_check.size() != data.times.size()) {
+                    log("[WARNING] Time grid loading mismatch: " +
+                        std::to_string(time_check.size()) + " vs " +
+                        std::to_string(data.times.size()));
+                }
+            } catch (const std::exception& e) {
+                log("[ERROR] Failed to load time grid: " + std::string(e.what()));
+            }
+
+            // Выбор модели для генерации
+            log("[DataGenerator] Using model: " +
+                std::string(config_.model_type == ModelType::MODEL0 ? "MODEL0" : "MODEL2"));
+
             if (config_.model_type == ModelType::MODEL0) {
                 generate_with_model0(data);
             } else {
@@ -150,14 +247,22 @@ namespace data_generator {
             // Рассчитываем метрики
             calculate_metrics(data);
 
-            // Рассчитываем сравнение фильтров
+            // Расчёт метрик сравнения
             if (config_.test_ckf && !data.ckf_estimates.empty()) {
                 calculate_comparison_metrics(data);
             }
+            log("[DataGenerator] Data generation completed");
             return data;
         }
 
-        void save(const SimulationData& data) {
+        /**
+         * @brief Сохранение данных в выбранном формате
+         * @param data Данные для сохранения
+         */
+        void save(const SimulationData& data)
+        {
+            log("[DataGenerator] Saving data in " +
+                format_to_string(config_.format) + " format");
             switch (config_.format) {
                 case DataFormat::BINARY:
                     saveBinary(data);
@@ -172,10 +277,32 @@ namespace data_generator {
                     saveTextTXT(data);
                     break;
             }
+            log("[DataGenerator] Data saved successfully");
         }
 
     private:
+        /**
+         * @brief Конвертация формата в строку
+         * @param format Формат данных
+         * @return std::string Строковое представление формата
+         */
+        static std::string format_to_string(DataFormat format)
+        {
+            switch (format) {
+                case DataFormat::BINARY: return "BINARY";
+                case DataFormat::TEXT_CSV: return "TEXT_CSV";
+                case DataFormat::TEXT_MATLAB: return "TEXT_MATLAB";
+                case DataFormat::TEXT_TXT: return "TEXT_TXT";
+                default: return "UNKNOWN";
+            }
+        }
+
+        /**
+         * @brief Генерация данных с использованием MODEL0
+         * @param data Структура для хранения данных
+         */
         void generate_with_model0(SimulationData& data) {
+            log("[DataGenerator] Generating with MODEL0");
             // Инициализация фильтров
             model0::reset_noise();
 
@@ -188,6 +315,9 @@ namespace data_generator {
             // Подготовка фильтров
             kalman::CKF ckf(Eigen::Vector2d::Zero(), P0);
             kalman::SRCF srcf(Eigen::Vector2d::Zero(), P0);
+
+            log("[MODEL0] Initial state: x_true = [0, 0]");
+            log("[MODEL0] Initial covariance: P0 = diag(0.1, 0.1)");
 
             // Главный цикл симуляции
             for (size_t k = 0; k < data.times.size() - 1; ++k) {
@@ -243,9 +373,17 @@ namespace data_generator {
                 data.noisy_measurements.push_back(y_noisy);
                 data.controls.push_back(u);
             }
+            log("[MODEL0] Generation completed: " +
+                std::to_string(data.true_states.size()) + " steps");
         }
 
-        void generate_with_model2(SimulationData& data) {
+        /**
+         * @brief Генерация данных с использованием MODEL2
+         * @param data Структура для хранения данных
+         */
+        void generate_with_model2(SimulationData& data)
+        {
+            log("[DataGenerator] Generating with MODEL2");
             // Инициализация фильтров
             model2::reset_noise();
 
@@ -258,6 +396,9 @@ namespace data_generator {
             // Подготовка фильтров
             kalman::CKF ckf(Eigen::Vector2d::Zero(), P0);
             kalman::SRCF srcf(Eigen::Vector2d::Zero(), P0);
+
+            log("[MODEL2] Initial state: x_true = [0, 0]");
+            log("[MODEL2] Initial covariance: P0 = [[0.1, 0], [0, 0.01]]");
 
             // Главный цикл симуляции
             for (size_t k = 0; k < data.times.size() - 1; ++k) {
@@ -273,7 +414,7 @@ namespace data_generator {
                 Eigen::MatrixXd Q = model2::Q(dt) * config_.process_noise_scale;
                 Eigen::MatrixXd R = model2::R(t) * config_.measurement_noise_scale;
 
-                // Управление
+                // Управляющее воздействие
                 Eigen::VectorXd u = model2::u(t, config_.scenario.scenario2);
 
                 // Динамика системы
@@ -312,28 +453,49 @@ namespace data_generator {
                 data.noisy_measurements.push_back(y_noisy);
                 data.controls.push_back(u);
             }
+            log("[MODEL2] Generation completed: " +
+                std::to_string(data.true_states.size()) + " steps");
         }
 
-        void calculate_metrics(SimulationData& data) {
+        /**
+         * @brief Расчет метрик производительности фильтров
+         * @param data Данные симуляции
+         */
+        void calculate_metrics(SimulationData& data)
+        {
+            log("[DataGenerator] Calculating filter metrics");
             // Рассчитываем метрики для CKF
             if (config_.test_ckf && !data.ckf_estimates.empty()) {
                 calculate_filter_metrics(data.true_states, data.ckf_estimates,
                                          data.ckf_covariances, data.times,
                                          data.ckf_metrics);
+                log("[Metrics] CKF average error: " + std::to_string(data.ckf_metrics.average_error));
             }
 
             // Рассчитываем метрики для SRCF
             calculate_filter_metrics(data.true_states, data.srcf_estimates,
                                      data.srcf_covariances, data.times,
                                      data.srcf_metrics);
+            log("[Metrics] SRCF average error: " + std::to_string(data.srcf_metrics.average_error));
         }
 
-        void calculate_filter_metrics(const std::vector<Eigen::Vector2d>& true_states,
+        /**
+         * @brief Расчет метрик для одного фильтра
+         * @param true_states Истинные состояния
+         * @param estimates Оценки фильтра
+         * @param covariances Ковариации фильтра
+         * @param times Временные метки
+         * @param metrics Структура для сохранения метрик
+         */
+        static void calculate_filter_metrics(const std::vector<Eigen::Vector2d>& true_states,
                                       const std::vector<Eigen::Vector2d>& estimates,
                                       const std::vector<Eigen::Matrix2d>& covariances,
                                       const std::vector<double>& times,
                                       SimulationData::FilterMetrics& metrics)
         {
+            const size_t n = true_states.size();
+            if (n == 0) return;
+
             double sum_sq_error = 0.0;
             double sum_cov_norm = 0.0;
             double sum_cond = 0.0;
@@ -341,9 +503,9 @@ namespace data_generator {
 
             metrics.max_error = 0.0;
             metrics.error_history.clear();
-            metrics.error_history.reserve(true_states.size());
+            metrics.error_history.reserve(n);
 
-            for (size_t i = 0; i < true_states.size(); ++i) {
+            for (size_t i = 0; i < n; ++i) {
                 // Ошибка оценки
                 double error = (true_states[i] - estimates[i]).norm();
                 metrics.error_history.push_back(error);
@@ -358,7 +520,7 @@ namespace data_generator {
 
                 // БЕЗОПАСНОЕ вычисление числа обусловленности
                 Eigen::JacobiSVD<Eigen::Matrix2d> svd(covariances[i]);
-                Eigen::Vector2d singular_values = svd.singularValues();
+                const Eigen::Vector2d& singular_values = svd.singularValues();
 
                 // Проверяем, что матрица не вырождена
                 double min_sv = singular_values.minCoeff();
@@ -393,13 +555,21 @@ namespace data_generator {
                                   sum_cond / valid_cond_count : 1.0;
         }
 
-        void calculate_comparison_metrics(SimulationData& data) {
+        /**
+         * @brief Расчет метрик сравнения фильтров
+         * @param data Данные симуляции
+         */
+        void calculate_comparison_metrics(SimulationData& data)
+        {
             if (!config_.test_ckf || data.ckf_estimates.empty()) {
                 return;
             }
 
+            const size_t n = data.true_states.size();
             data.comparison.error_differences.clear();
             data.comparison.relative_differences.clear();
+            data.comparison.error_differences.reserve(n);
+            data.comparison.relative_differences.reserve(n);
 
             double sum_diff = 0.0;
             double sum_sq_diff = 0.0;
@@ -408,7 +578,7 @@ namespace data_generator {
             data.comparison.max_ckf_minus_srcf = -std::numeric_limits<double>::max();
             int srcf_better_count = 0;
 
-            for (size_t i = 0; i < data.true_states.size(); ++i) {
+            for (size_t i = 0; i < n; ++i) {
                 double ckf_error = data.ckf_metrics.error_history[i];
                 double srcf_error = data.srcf_metrics.error_history[i];
                 double diff = srcf_error - ckf_error;
@@ -416,7 +586,7 @@ namespace data_generator {
                 data.comparison.error_differences.push_back(diff);
 
                 // Относительная разница в процентах
-                double rel_diff = (ckf_error > 1e-10) ?
+                const double rel_diff = (ckf_error > 1e-10) ?
                                   (diff / ckf_error) * 100.0 : 0.0;
                 data.comparison.relative_differences.push_back(rel_diff);
 
@@ -437,33 +607,45 @@ namespace data_generator {
                 }
             }
 
-            size_t n = data.comparison.error_differences.size();
 
             data.comparison.avg_error_ratio = data.srcf_metrics.average_error /
                                               data.ckf_metrics.average_error;
-            data.comparison.rms_error_ratio = data.srcf_metrics.rms_error /
-                                              data.ckf_metrics.rms_error;
-            data.comparison.max_error_ratio = data.srcf_metrics.max_error /
-                                              data.ckf_metrics.max_error;
-            data.comparison.cond_number_ratio = data.srcf_metrics.cond_number /
-                                                data.ckf_metrics.cond_number;
-            data.comparison.cov_norm_ratio = data.srcf_metrics.cov_norm /
-                                             data.ckf_metrics.cov_norm;
+            if (data.ckf_metrics.rms_error > 1e-14) {
+                data.comparison.rms_error_ratio = data.srcf_metrics.rms_error / data.ckf_metrics.rms_error;
+            }
+
+            if (data.ckf_metrics.max_error > 1e-14) {
+                data.comparison.max_error_ratio = data.srcf_metrics.max_error / data.ckf_metrics.max_error;
+            }
+
+            if (data.ckf_metrics.cond_number > 1e-14) {
+                data.comparison.cond_number_ratio = data.srcf_metrics.cond_number / data.ckf_metrics.cond_number;
+            }
+
+            if (data.ckf_metrics.cov_norm > 1e-14) {
+                data.comparison.cov_norm_ratio = data.srcf_metrics.cov_norm / data.ckf_metrics.cov_norm;
+            }
 
             data.comparison.avg_absolute_difference = sum_abs_diff / n;
-            data.comparison.percentage_srcf_better = (srcf_better_count * 100.0) / n;
+            data.comparison.percentage_srcf_better = (static_cast<double>(srcf_better_count) / n) * 100.0;
 
             // Стандартное отклонение разницы
             double mean_diff = sum_diff / n;
             data.comparison.std_dev_difference = std::sqrt((sum_sq_diff / n) - (mean_diff * mean_diff));
+            log("[Comparison] SRCF is better in " + std::to_string(data.comparison.percentage_srcf_better) + "% of steps");
         }
 
         // ============================================================================
-        // 3. ФУНКЦИИ СОХРАНЕНИЯ
+        // ФУНКЦИИ СОХРАНЕНИЯ
         // ============================================================================
 
-        void saveBinary(const SimulationData& data) {
-            std::string prefix = config_.output_dir + "/";
+        /**
+         * @brief Сохранение данных в бинарном формате
+         * @param data Данные для сохранения
+         */
+        void saveBinary(const SimulationData& data)
+        {
+            const std::string prefix = config_.output_dir + "/";
 
             // Сохранение времен
             saveVectorBinary(data.times, prefix + "times.bin");
@@ -491,12 +673,18 @@ namespace data_generator {
             saveMatrix2dBinary(data.srcf_covariances, prefix + "srcf_covariances.bin");
 
             // Сохранение метрик
+            saveConfig();
             saveMetrics(data, prefix + "metrics.txt");
             saveComparisonStats(data, prefix + "comparison_stats.txt");
         }
 
-        void saveTextCSV(const SimulationData& data) {
-            std::string filename = config_.output_dir + "/simulation_data.csv";
+        /**
+         * @brief Сохранение данных в CSV формате
+         * @param data Данные для сохранения
+         */
+        void saveTextCSV(const SimulationData& data)
+        {
+            const std::string filename = config_.output_dir + "/simulation_data.csv";
             std::ofstream file(filename);
 
             if (!file.is_open()) {
@@ -551,8 +739,13 @@ namespace data_generator {
             saveComparisonStats(data, config_.output_dir + "/comparison_stats.txt");
         }
 
-        void saveTextMatlab(const SimulationData& data) {
-            std::string filename = config_.output_dir + "/simulation_data.m";
+        /**
+         * @brief Сохранение данных в MATLAB формате
+         * @param data Данные для сохранения
+         */
+        void saveTextMatlab(const SimulationData& data)
+        {
+            const std::string filename = config_.output_dir + "/simulation_data.m";
             std::ofstream file(filename);
 
             if (!file.is_open()) {
@@ -626,8 +819,13 @@ namespace data_generator {
             saveComparisonStats(data, config_.output_dir + "/comparison_stats.txt");
         }
 
-        void saveTextTXT(const SimulationData& data) {
-            std::string prefix = config_.output_dir + "/";
+        /**
+         * @brief Сохранение данных в TXT формате
+         * @param data Данные для сохранения
+         */
+        void saveTextTXT(const SimulationData& data)
+        {
+            const std::string prefix = config_.output_dir + "/";
             saveMainDataTXT(data, prefix + "main_data.txt");
             saveCovarianceTXT(data, prefix + "covariances.txt");
             saveMeasurementsTXT(data, prefix + "measurements.txt");
@@ -637,7 +835,13 @@ namespace data_generator {
             saveComparisonStats(data, prefix + "comparison_details.txt");
         }
 
-        void saveMainDataTXT(const SimulationData& data, const std::string& filename) {
+        /**
+         * @brief Сохранение основных данных в TXT формате
+         * @param data Данные для сохранения
+         * @param filename Название файла
+         */
+        void saveMainDataTXT(const SimulationData& data, const std::string& filename) const
+        {
             std::ofstream file(filename);
             if (!file.is_open()) {
                 throw std::runtime_error("Cannot open file: " + filename);
@@ -683,7 +887,13 @@ namespace data_generator {
             file.close();
         }
 
-        void saveCovarianceTXT(const SimulationData& data, const std::string& filename) {
+        /**
+         * @brief Сохранение данных ковариаций в TXT формате
+         * @param data Данные для сохранения
+         * @param filename Название файла
+         */
+        void saveCovarianceTXT(const SimulationData& data, const std::string& filename) const
+        {
             std::ofstream file(filename);
             if (!file.is_open()) {
                 throw std::runtime_error("Cannot open file: " + filename);
@@ -720,7 +930,13 @@ namespace data_generator {
             file.close();
         }
 
-        void saveMeasurementsTXT(const SimulationData& data, const std::string& filename) {
+        /**
+         * @brief Сохранение данных измерений в TXT формате
+         * @param data Данные для сохранения
+         * @param filename Название файла
+         */
+        static void saveMeasurementsTXT(const SimulationData& data, const std::string& filename)
+        {
             std::ofstream file(filename);
             if (!file.is_open()) {
                 throw std::runtime_error("Cannot open file: " + filename);
@@ -752,7 +968,13 @@ namespace data_generator {
             file.close();
         }
 
-        void saveStatisticsTXT(const SimulationData& data, const std::string& filename) {
+        /**
+         * @brief Сохранение данных статистики в TXT формате
+         * @param data Данные для сохранения
+         * @param filename Название файла
+         */
+        void saveStatisticsTXT(const SimulationData& data, const std::string& filename) const
+        {
             std::ofstream file(filename);
             if (!file.is_open()) {
                 throw std::runtime_error("Cannot open file: " + filename);
@@ -851,7 +1073,13 @@ namespace data_generator {
             file.close();
         }
 
-        void saveComparisonStats(const SimulationData& data, const std::string& filename) {
+        /**
+         * @brief Сохранение данных сравнения фильтров в TXT формате
+         * @param data Данные для сохранения
+         * @param filename Название файла
+         */
+        void saveComparisonStats(const SimulationData& data, const std::string& filename) const
+        {
             std::ofstream file(filename);
 
             file << "=== DETAILED FILTER COMPARISON ===\n\n";
@@ -927,7 +1155,13 @@ namespace data_generator {
             file.close();
         }
 
-        void saveMetrics(const SimulationData& data, const std::string& filename) {
+        /**
+         * @brief Сохранение данных вычисления метрик в TXT формате
+         * @param data Данные для сохранения
+         * @param filename Название файла
+         */
+        void saveMetrics(const SimulationData& data, const std::string& filename) const
+        {
             std::ofstream file(filename);
 
             file << "=== FILTER PERFORMANCE METRICS ===\n\n";
@@ -954,7 +1188,11 @@ namespace data_generator {
             file.close();
         }
 
-        void saveConfig() {
+        /**
+         * @brief Сохранение текущей конфигурации
+         */
+        void saveConfig() const
+        {
             std::string filename = config_.output_dir + "/config.txt";
             std::ofstream file(filename);
 
@@ -1006,18 +1244,39 @@ namespace data_generator {
             file.close();
         }
 
-        // Вспомогательные функции для бинарного сохранения
-        void saveVectorBinary(const std::vector<double>& vec, const std::string& filename) {
+        // ============================================================================
+        // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ СОХРАНЕНИЯ
+        // ============================================================================
+
+        /**
+         * @brief Сохранение вектора double в бинарном формате
+         * @param vec Вектор для сохранения
+         * @param filename Имя файла
+         */
+        static void saveVectorBinary(const std::vector<double>& vec, const std::string& filename)
+        {
             std::ofstream file(filename, std::ios::binary);
-            size_t n = vec.size();
+            if (!file.is_open()) {
+                throw std::runtime_error("Cannot open file: " + filename);
+            }
+            const size_t n = vec.size();
             file.write(reinterpret_cast<const char*>(&n), sizeof(size_t));
             file.write(reinterpret_cast<const char*>(vec.data()), n * sizeof(double));
             file.close();
         }
 
-        void saveVector2dBinary(const std::vector<Eigen::Vector2d>& vec, const std::string& filename) {
+        /**
+         * @brief Сохранение вектора Vector2d в бинарном формате
+         * @param vec Вектор для сохранения
+         * @param filename Имя файла
+         */
+        static void saveVector2dBinary(const std::vector<Eigen::Vector2d>& vec, const std::string& filename)
+        {
             std::ofstream file(filename, std::ios::binary);
-            size_t n = vec.size();
+            if (!file.is_open()) {
+                throw std::runtime_error("Cannot open file: " + filename);
+            }
+            const size_t n = vec.size();
             file.write(reinterpret_cast<const char*>(&n), sizeof(size_t));
             for (const auto& v : vec) {
                 file.write(reinterpret_cast<const char*>(v.data()), 2 * sizeof(double));
@@ -1025,9 +1284,18 @@ namespace data_generator {
             file.close();
         }
 
-        void saveMatrix2dBinary(const std::vector<Eigen::Matrix2d>& mats, const std::string& filename) {
+        /**
+         * @brief Сохранение вектора Matrix2d в бинарном формате
+         * @param mats Вектор матриц для сохранения
+         * @param filename Имя файла
+         */
+        static void saveMatrix2dBinary(const std::vector<Eigen::Matrix2d>& mats, const std::string& filename)
+        {
             std::ofstream file(filename, std::ios::binary);
-            size_t n = mats.size();
+            if (!file.is_open()) {
+                throw std::runtime_error("Cannot open file: " + filename);
+            }
+            const size_t n = mats.size();
             file.write(reinterpret_cast<const char*>(&n), sizeof(size_t));
             for (const auto& m : mats) {
                 file.write(reinterpret_cast<const char*>(m.data()), 4 * sizeof(double));
@@ -1037,14 +1305,23 @@ namespace data_generator {
     };
 
 // ============================================================================
-// 4. ИНСТРУМЕНТЫ АНАЛИЗА В СТИЛЕ VERHAEGEN & VAN DOOREN
+// ФУНКЦИИ АНАЛИЗА В СТИЛЕ VERHAEGEN & VAN DOOREN
 // ============================================================================
 
-    void analyze_verhaegen_style(const SimulationData& data, bool test_ckf = true) {
+    /**
+     * @brief Анализ результатов в стиле Verhaegen & Van Dooren
+     * @param data Данные симуляции
+     * @param test_ckf Флаг тестирования CKF
+     *
+     * @note Реализует анализ численной устойчивости, чисел обусловленности
+     *       и производительности фильтров согласно методологии статьи.
+     */
+    void analyze_verhaegen_style(const SimulationData& data, bool test_ckf = true)
+    {
         std::cout << "\n=== ANALYSIS IN VERHAEGEN & VAN DOOREN STYLE ===\n";
         std::cout << "===TESTING TIMES===" << std::endl;
-        for (int i = 0; i < data.times.size(); ++i) {
-            std::cout << data.times[i] << " ";
+        for (double time : data.times) {
+            std::cout << time << " ";
         }
         std::cout << std::endl;
 
@@ -1053,15 +1330,15 @@ namespace data_generator {
             double max_ckf_asymmetry = 0.0;
             int ckf_non_positive = 0;
 
-            for (size_t i = 0; i < data.ckf_covariances.size(); ++i) {
+            for (const auto & ckf_covariance : data.ckf_covariances) {
                 // Асимметрия: ||P - P^T|| / ||P||
-                Eigen::Matrix2d asym_ckf = data.ckf_covariances[i] -
-                                           data.ckf_covariances[i].transpose();
-                double asym_norm = asym_ckf.norm() / data.ckf_covariances[i].norm();
+                Eigen::Matrix2d asym_ckf = ckf_covariance -
+                                           ckf_covariance.transpose();
+                double asym_norm = asym_ckf.norm() / ckf_covariance.norm();
                 max_ckf_asymmetry = std::max(max_ckf_asymmetry, asym_norm);
 
                 // Положительная определенность
-                Eigen::LLT<Eigen::Matrix2d> llt_ckf(data.ckf_covariances[i]);
+                Eigen::LLT<Eigen::Matrix2d> llt_ckf(ckf_covariance);
                 if (llt_ckf.info() != Eigen::Success) ckf_non_positive++;
             }
 
@@ -1081,34 +1358,48 @@ namespace data_generator {
         int count = 0;
 
         for (size_t i = 100; i < data.srcf_covariances.size(); i += 100) {
-            Eigen::JacobiSVD<Eigen::Matrix2d> svd_srcf(data.srcf_covariances[i]);
-            double cond_srcf = svd_srcf.singularValues()(0) /
-                               svd_srcf.singularValues()(svd_srcf.singularValues().size()-1);
-            avg_cond_srcf += cond_srcf;
+            if (i < data.srcf_covariances.size()) {
+                Eigen::JacobiSVD<Eigen::Matrix2d> svd_srcf(data.srcf_covariances[i]);
+                const Eigen::Vector2d& sv_srcf = svd_srcf.singularValues();
 
-            if (test_ckf) {
-                Eigen::JacobiSVD<Eigen::Matrix2d> svd_ckf(data.ckf_covariances[i]);
-                double cond_ckf = svd_ckf.singularValues()(0) /
-                                  svd_ckf.singularValues()(svd_ckf.singularValues().size()-1);
-                avg_cond_ckf += cond_ckf;
+                if (sv_srcf.minCoeff() > 1e-15) {
+                    const double cond_srcf = sv_srcf.maxCoeff() / sv_srcf.minCoeff();
+                    if (cond_srcf < 1e15) {
+                        avg_cond_srcf += cond_srcf;
+                    }
+                }
+
+                if (test_ckf && i < data.ckf_covariances.size()) {
+                    Eigen::JacobiSVD<Eigen::Matrix2d> svd_ckf(data.ckf_covariances[i]);
+                    const Eigen::Vector2d& sv_ckf = svd_ckf.singularValues();
+
+                    if (sv_ckf.minCoeff() > 1e-15) {
+                        const double cond_ckf = sv_ckf.maxCoeff() / sv_ckf.minCoeff();
+                        if (cond_ckf < 1e15) {
+                            avg_cond_ckf += cond_ckf;
+                        }
+                    }
+                }
+
+                count++;
             }
-
-            count++;
         }
 
-        avg_cond_srcf /= count;
-        if (test_ckf) avg_cond_ckf /= count;
+        if (count > 0) {
+            avg_cond_srcf /= count;
+            if (test_ckf) avg_cond_ckf /= count;
 
-        std::cout << "\nCondition numbers (avg over " << count << " samples):\n";
-        if (test_ckf) {
-            std::cout << "  CKF: " << avg_cond_ckf << "\n";
+            std::cout << "\nCondition Number Analysis (average over " << count << " samples):\n";
+            if (test_ckf) {
+                std::cout << "  CKF: " << avg_cond_ckf << "\n";
+            }
+            std::cout << "  SRCF: " << avg_cond_srcf << "\n";
         }
-        std::cout << "  SRCF: " << avg_cond_srcf << "\n";
 
         // 3. Анализ разницы ошибок
         if (test_ckf) {
             std::cout << "\n=== ERROR DIFFERENCE ANALYSIS ===\n";
-            std::cout << std::fixed << std::setprecision(6);
+            std::cout << std::fixed << std::setprecision(15);
 
             std::cout << "Average error ratio (SRCF/CKF): " << data.comparison.avg_error_ratio << "\n";
             std::cout << "RMS error ratio (SRCF/CKF): " << data.comparison.rms_error_ratio << "\n";
@@ -1166,17 +1457,22 @@ namespace data_generator {
             std::string reasons;
 
             // Рекомендации в стиле статьи
-            if (data.srcf_metrics.average_error > data.ckf_metrics.average_error * 1.2) {
-                std::cout << "\nCONCLUSION: CKF performs significantly better than SRCF\n";
+            if (data.srcf_metrics.average_error > data.ckf_metrics.average_error) {
+                reasons +=  "\nCONCLUSION: CKF performs significantly better than SRCF\n";
             } else if (data.srcf_metrics.average_error < data.ckf_metrics.average_error) {
-                std::cout << "\nCONCLUSION: SRCF performs better than CKF\n";
+                reasons += "\nCONCLUSION: SRCF performs better than CKF\n";
             } else {
-                std::cout << "\nCONCLUSION: Both filters have similar performance\n";
+                reasons += "\nCONCLUSION: Both filters have similar performance\n";
             }
 
-            if (data.comparison.avg_error_ratio > 1.2) {
+
+            if (data.comparison.avg_error_ratio < 0.95) {
+                reasons += "Recommendation: Use SRCF (significantly better average error)\n";
+            } else if (data.comparison.avg_error_ratio > 1.05) {
                 recommend_srcf = false;
-                reasons += "CKF has significantly lower average error (+20%)\n";
+                reasons += "Recommendation: Use CKF (significantly better average error)\n";
+            } else {
+                reasons += "Recommendation: Both filters have similar performance\n";
             }
 
             if (data.comparison.rms_error_ratio > 1.15) {
@@ -1186,6 +1482,13 @@ namespace data_generator {
 
             if (data.comparison.percentage_srcf_better < 40.0) {
                 if (!recommend_srcf) reasons += "CKF is more consistent\n";
+                else recommend_srcf = false;
+            }
+
+            if (data.comparison.percentage_srcf_better > 60.0) {
+                reasons += "  Note: SRCF is more consistent across time steps\n";
+            } else if (data.comparison.percentage_srcf_better < 40.0) {
+                if (!recommend_srcf) reasons += "  Note: CKF is more consistent across time steps\n";
                 else recommend_srcf = false;
             }
 
@@ -1207,11 +1510,8 @@ namespace data_generator {
             if (!reasons.empty()) {
                 std::cout << "Reasons:\n" << reasons;
             }
-
         }
     }
-
 } // namespace data_generator
-
 
 #endif // DATA_GENERATOR_HPP
