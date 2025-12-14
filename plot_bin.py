@@ -7,7 +7,7 @@ import os
 from matplotlib.patches import Ellipse
 
 class KalmanVisualizer:
-    def __init__(self, data_path='./cmake-build-debug/data/test_process_noise'):
+    def __init__(self, data_path='./cmake-build-debug/data/unstable_test'):
         self.data_path = data_path
         self.df = None
         self.times = None
@@ -26,9 +26,9 @@ class KalmanVisualizer:
 
             # Ищем папки с данными
             possible_paths = [
-                './data/test_process_noise',
-                '../data/test_process_noise',
-                '../../data/test_process_noise',
+                './data/unstable_test',
+                '../data/unstable_test',
+                '../../data/unstable_test',
                 f'../{self.data_path}',
                 f'../../{self.data_path}'
             ]
@@ -985,12 +985,12 @@ if __name__ == "__main__":
     else:
         # Пробуем разные возможные пути
         possible_paths = [
-            './cmake-build-debug/data/test_process_noise',
-            './data/test_process_noise',
-            '../cmake-build-debug/data/test_process_noise',
-            '../data/test_process_noise',
-            '../../data/test_process_noise',
-            'data/test_process_noise'
+            './cmake-build-debug/data/unstable_test',
+            './data/unstable_test',
+            '../cmake-build-debug/data/unstable_test',
+            '../data/unstable_test',
+            '../../data/unstable_test',
+            'data/unstable_test'
         ]
 
         data_path = None
@@ -1001,7 +1001,7 @@ if __name__ == "__main__":
                 break
 
         if data_path is None:
-            data_path = './data/test_process_noise'
+            data_path = './data/unstable_test'
             print(f"⚠ Путь не найден, используем по умолчанию: {data_path}")
             print("  Для указания другого пути запустите:")
             print(f"    python {sys.argv[0]} /ваш/путь/к/данным")

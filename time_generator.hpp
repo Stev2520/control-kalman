@@ -58,7 +58,7 @@ namespace time_generator {
         std::default_random_engine gen_;                 /**< Генератор случайных чисел */
         std::uniform_real_distribution<double> uniform_dist_; /**< Равномерное распределение */
         std::normal_distribution<double> normal_dist_;   /**< Нормальное распределение */
-        int current_seed_{};
+        int current_seed_{}; /**< Текущее зерно инициализации генератора */
 
     public:
         /**
@@ -75,7 +75,7 @@ namespace time_generator {
          *       стандартным отклонением 0.005.
          */
         explicit TimeGenerator(auto seed = static_cast<int>(std::random_device{}()))
-                : gen_(seed), uniform_dist_(0.001, 0.05)  // Сохраняем seed
+                : gen_(seed), uniform_dist_(0.001, 0.05)
                 , normal_dist_(0.0, 0.005)
                 , current_seed_(seed) {}
 
