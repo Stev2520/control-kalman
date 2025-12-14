@@ -245,7 +245,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         // Верхний блок: [SR, C*S, 0]
         prearray.block(0, 0, ny, ny) = SR;
         prearray.block(0, ny, ny, nx) = C_times_S;
-        prearray.block(0, nx + ny, ny, nw).setZero();;
+        prearray.block(0, nx + ny, ny, nw).setZero();
 
         // Нижний блок: [0, A*S, B*SQ]
         prearray.block(ny, 0, nx, ny).setZero();
@@ -373,8 +373,8 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
                 Eigen::MatrixXd::Identity(ny, ny));
         std::cout << "SRCF K = G * inv(S_Re):" << std::endl << K_srcf << std::endl;
     } catch (const std::exception& e) {
-        std::cerr << "ERROR computing Kalman gain: " << e.what() << std::endl;
         K_srcf = G * (S_Re + Eigen::MatrixXd::Identity(ny, ny) * 1e-8).inverse();
+        std::cerr << "ERROR computing Kalman gain: " << e.what() << std::endl;
     }
 
     // S матрица ковариации инноваций: S = S_Re * S_Re^T

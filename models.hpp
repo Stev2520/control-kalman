@@ -28,11 +28,13 @@
 // ГЕНЕРАТОР ШУМА
 // ============================================================================
 
-namespace model0 {
+namespace model0
+{
     void reset_noise_with_seed(int seed);
 }
 
-namespace model2 {
+namespace model2
+{
     void reset_noise_with_seed(int seed);
 }
 
@@ -94,7 +96,8 @@ namespace kalman_noise
             if (llt.info() != Eigen::Success) {
                 throw std::runtime_error("NoiseGenerator: covariance matrix is not positive definite");
             }
-            return llt.matrixL() * gaussianVector(covariance.rows());
+            int covariance_size = static_cast<int>(covariance.rows());
+            return llt.matrixL() * gaussianVector(covariance_size);
         }
 
         /**
@@ -107,17 +110,14 @@ namespace kalman_noise
          * @brief Получение текущего состояния генератора
          * @return std::default_random_engine& Ссылка на генератор
          */
-        std::default_random_engine& getGenerator() {
-            return generator;
-        }
+        std::default_random_engine& getGenerator() { return generator; }
 
-        void reset(int seed = std::random_device{}()) {
-            generator.seed(seed);
-            distribution.reset();
-        }
-
-        void reset_with_state(int seed = std::random_device{}()) {
-            // Полный сброс: создаем новый объект
+        /**
+         * @brief Сброс состояния генератора шума путём инициализации нового объекта
+         * @param seed Новое значение зерна
+         */
+        void reset_with_state(auto seed = static_cast<int>(std::random_device{}()))
+        {
             *this = NoiseGenerator(seed);
         }
 
@@ -128,10 +128,13 @@ namespace kalman_noise
      */
     static NoiseGenerator noise_gen;
 
-    inline void reset_noise_generators(int seed = 42) {
+    /**
+     * @brief Полный сброс генераторов шума при инициализации модели
+     * @param seed Новое значение зерна
+     */
+    inline void reset_noise_generators(int seed = 42)
+    {
         noise_gen.reset_with_state(seed);
-
-        // Передаем seed в функции сброса
         model0::reset_noise_with_seed(seed);
         model2::reset_noise_with_seed(seed);
     }
@@ -157,10 +160,6 @@ namespace model0
     const double sigma_w = 1.0;     /**< Стандартное отклонение шума процесса (умеренный шум) */
     const double sigma_v = 1.0;     /**< Стандартное отклонение шума измерений */
 
-    // Переменные для генерации коррелированного шума
-//    static double last_w = 0.0;     /**< Последнее значение коррелированного шума */
-//    static double alpha = 0.9;      /**< Коэффициент корреляции AR(1) процесса */
-
     /**
      * @enum ControlScenario
      * @brief Сценарии управления для модели 0
@@ -174,46 +173,47 @@ namespace model0
 
     // Структура для хранения состояния генератора
     struct NoiseState {
-        double last_w = 0.0;
-        double alpha = 0.98;
-        std::default_random_engine generator;
-        std::normal_distribution<double> distribution;
+        // Переменные для генерации коррелированного шума
+        double last_w = 0.0; /**< Последнее значение коррелированного шума */
+        double alpha = 0.98;  /**< Коэффициент корреляции AR(1) процесса */
+        std::default_random_engine generator; /**< Генератор случайных чисел */
+        std::normal_distribution<double> distribution; /**< Нормальное распределение N(0,1) */
 
-        NoiseState(int seed = 42)
+        /**
+         * @brief Конструктор генератора шума для модели 1
+         * @param seed Начальное значение для генератора случайных чисел
+         */
+        explicit NoiseState(int seed = 42)
                 : generator(seed), distribution(0.0, 1.0) {}
 
-        void reset(int seed) {
+        /**
+         * @brief Сброс состояния генератора шума
+         * @param seed Новое значение зерна
+         */
+        void reset(int seed)
+        {
             last_w = 0.0;
             generator.seed(seed);
             distribution.reset();
         }
     };
 
-    // Thread-local состояние
-    NoiseState& get_noise_state() {
-        static thread_local NoiseState noise_state(42);  // Только для инициализации по умолчанию
+    /**
+     * @brief Получение текущего состояния генератора шума
+     */
+    NoiseState& get_noise_state()
+    {
+        static thread_local NoiseState noise_state(42);
         return noise_state;
-    }
-
-    void reset_noise_with_seed(int seed) {
-        get_noise_state().reset(seed);
-    }
-
-    double generate_correlated_noise() {
-        auto& state = get_noise_state();
-        double xi = state.distribution(state.generator);
-        state.last_w = state.alpha * state.last_w +
-                       sigma_w * std::sqrt(1.0 - state.alpha * state.alpha) * xi;
-        return state.last_w;
     }
 
     /**
      * @brief Сброс состояния генератора шума
      */
-//    void reset_noise_with_seed(int seed) {
-//        last_w = 0.0;
-//        generator.seed(seed);
-//    }
+    void reset_noise_with_seed(int seed)
+    {
+        get_noise_state().reset(seed);
+    }
 
     /**
      * @brief Генерация коррелированного шума процесса по модели AR(1)
@@ -221,12 +221,14 @@ namespace model0
      *
      * @note Модель: ω_k = α·ω_{k-1} + σ·√(1-α²)·ξ_k
      */
-//    double generate_correlated_noise()
-//    {
-//        double xi = distribution(generator);
-//        last_w = alpha * last_w + sigma_w * std::sqrt(1.0 - alpha * alpha) * xi;
-//        return last_w;
-//    }
+    double generate_correlated_noise()
+    {
+        auto& state = get_noise_state();
+        double xi = state.distribution(state.generator);
+        state.last_w = state.alpha * state.last_w +
+                       sigma_w * std::sqrt(1.0 - state.alpha * state.alpha) * xi;
+        return state.last_w;
+    }
 
     // ------------------------------------------------------------------------
     // МАТРИЦЫ МОДЕЛИ
@@ -516,11 +518,6 @@ namespace model2
     const double sigma_g = 0.01;    /**< рад/с (шум гироскопа) */
     const double sigma_a = 0.02;    /**< рад (шум акселерометра) */
 
-    // Переменные для коррелированного шума
-//    static double last_omega = 0.0; /**< Последнее значение коррелированного шума */
-//    static bool is_initialized = false;
-//    static double alpha = 0.98;     /**< Коэффициент корреляции AR(1) процесса */
-
     /**
      * @enum ControlScenario
      * @brief Сценарии управления для модели 2
@@ -534,37 +531,46 @@ namespace model2
 
     // Структура для хранения состояния генератора
     struct NoiseState {
-        double last_w = 0.0;
-        double alpha = 0.98;
-        std::default_random_engine generator;
-        std::normal_distribution<double> distribution;
+        // Переменные для генерации коррелированного шума
+        double last_w = 0.0; /**< Последнее значение коррелированного шума */
+        double alpha = 0.98;  /**< Коэффициент корреляции AR(1) процесса */
+        std::default_random_engine generator; /**< Генератор случайных чисел */
+        std::normal_distribution<double> distribution; /**< Нормальное распределение N(0,1) */
 
-        NoiseState(int seed = 42)
+        /**
+         * @brief Конструктор генератора шума для модели 1
+         * @param seed Начальное значение для генератора случайных чисел
+         */
+        explicit NoiseState(int seed = 42)
                 : generator(seed), distribution(0.0, 1.0) {}
 
-        void reset(int seed) {
+        /**
+         * @brief Сброс состояния генератора шума
+         * @param seed Новое значение зерна
+         */
+        void reset(int seed)
+        {
             last_w = 0.0;
             generator.seed(seed);
             distribution.reset();
         }
     };
 
-    // Thread-local состояние
-    NoiseState& get_noise_state() {
-        static thread_local NoiseState noise_state(42);  // Только для инициализации по умолчанию
+    /**
+     * @brief Получение текущего состояния генератора шума
+     */
+    NoiseState& get_noise_state()
+    {
+        static thread_local NoiseState noise_state(42);
         return noise_state;
     }
 
-    void reset_noise_with_seed(int seed) {
+    /**
+     * @brief Сброс состояния генератора шума
+     */
+    void reset_noise_with_seed(int seed)
+    {
         get_noise_state().reset(seed);
-    }
-
-    double generate_correlated_noise() {
-        auto& state = get_noise_state();
-        double xi = state.distribution(state.generator);
-        state.last_w = state.alpha * state.last_w +
-                       sigma_w * std::sqrt(1.0 - state.alpha * state.alpha) * xi;
-        return state.last_w;
     }
 
     /**
@@ -573,12 +579,14 @@ namespace model2
      *
      * @note Модель: ω_k = α·ω_{k-1} + σ·√(1-α²)·ξ_k
      */
-//    double generate_correlated_noise()
-//    {
-//        double xi = distribution(generator);
-//        last_w = alpha * last_w + sigma_w * std::sqrt(1.0 - alpha * alpha) * xi;
-//        return last_w;
-//    }
+    double generate_correlated_noise()
+    {
+        auto& state = get_noise_state();
+        double xi = state.distribution(state.generator);
+        state.last_w = state.alpha * state.last_w +
+                       sigma_w * std::sqrt(1.0 - state.alpha * state.alpha) * xi;
+        return state.last_w;
+    }
 
     // ------------------------------------------------------------------------
     // ОСНОВНЫЕ ФУНКЦИИ ДИСКРЕТИЗАЦИИ
@@ -596,13 +604,13 @@ namespace model2
     Eigen::MatrixXd Phi(double dt)
     {
         Eigen::Matrix2d phi;
-        double exp_term = exp(-0.5*dt);
-        double sin_term = sin(1.5*dt);
-        double cos_term = cos(1.5*dt);
-        phi(0,0) = exp_term * (sin_term/3.0 + cos_term);
-        phi(0,1) = exp_term * (2.0 * sin_term/3.0);
-        phi(1,0) = exp_term * (-5.0 * sin_term/3.0);
-        phi(1,1) = exp_term * (-sin_term/3.0 + cos_term);
+        double exp_term = exp(-0.5 * dt);
+        double sin_term = sin(1.5 * dt);
+        double cos_term = cos(1.5 * dt);
+        phi(0,0) = exp_term * (sin_term / 3.0 + cos_term);
+        phi(0,1) = exp_term * (2.0 * sin_term / 3.0);
+        phi(1,0) = exp_term * (-5.0 * sin_term / 3.0);
+        phi(1,1) = exp_term * (-sin_term / 3.0 + cos_term);
         return phi;
     }
 
@@ -633,8 +641,8 @@ namespace model2
         double exp_term = exp(-0.5 * dt);
         double sin_term = sin(1.5 * dt);
         double cos_term = cos(1.5 * dt);
-        gamma(0) = -2.0/15.0 * sin_term * exp_term - 2.0/5.0 * cos_term * exp_term + 2.0/5.0;
-        gamma(1) = 2.0/3.0 * sin_term * exp_term;
+        gamma(0) = -2.0 / 15.0 * sin_term * exp_term - 2.0 / 5.0 * cos_term * exp_term + 2.0 / 5.0;
+        gamma(1) = 2.0 / 3.0 * sin_term * exp_term;
         return gamma;
     }
 
@@ -793,11 +801,11 @@ namespace model2
         R_const << 0.1, 0.0,    // шум гироскопа (рад/с)
                 0.0, 0.5;    // шум акселерометра (м/с²)
 // Для более агрессивного фильтра (меньшая доверительность к измерениям)
-//        R << 0.01, 0.0,    // Более низкий шум гироскопа
-//                0.0, 0.05;    // Более низкий шум акселерометра
+//        R << 0.01, 0.0, // Более низкий шум гироскопа
+//                0.0, 0.05; // Более низкий шум акселерометра
 // Для более консервативного фильтра (большая доверительность к измерениям)
-//        R << 1.0, 0.0,     // Высокий шум гироскопа
-//                0.0, 2.0;     // Высокий шум акселерометра
+//        R << 1.0, 0.0, // Высокий шум гироскопа
+//                0.0, 2.0; // Высокий шум акселерометра
         return R_const;
     }
 

@@ -9,6 +9,11 @@
  */
 
 #include <utility>
+#include <iostream>
+#include <fstream>
+#include <limits>
+#include <stdexcept>
+#include <Eigen/Cholesky>
 
 #include "kalman.hpp"
 
@@ -16,7 +21,8 @@ using namespace kalman;
 
 // Проверка числовой корректности матрицы
 template<typename Derived>
-bool is_matrix_valid(const Eigen::MatrixBase<Derived>& mat) {
+bool is_matrix_valid(const Eigen::MatrixBase<Derived>& mat)
+{
     return mat.allFinite() &&
            (mat.array().isInf() == 0).all() &&
            (mat.array().isNaN() == 0).all();
@@ -27,7 +33,8 @@ template<typename MatrixType>
 bool check_matrix_dimensions(const MatrixType& mat,
                              Eigen::Index rows_expected,
                              Eigen::Index cols_expected,
-                             const std::string& name) {
+                             const std::string& name)
+{
     if (mat.rows() != rows_expected || mat.cols() != cols_expected) {
         std::cerr << "ERROR: Dimension mismatch for " << name
                   << ": expected " << rows_expected << "x" << cols_expected
@@ -185,10 +192,10 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     std::cout << "U_vector: " << u << "\n";
     std::cout << "Y_vector: " << y << "\n";
 
-    const size_t nx = x_.size();
-    const size_t ny = y.size();
-    const size_t nw = B.cols();
-    const size_t nu = u.size();
+    const Eigen::Index nx = x_.size();
+    const Eigen::Index ny = y.size();
+    const Eigen::Index nw = B.cols();
+    const Eigen::Index nu = u.size();
 
     // Проверка числовой корректности
     if (!is_matrix_valid(A) || !is_matrix_valid(B) || !is_matrix_valid(C) ||
@@ -214,6 +221,7 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
               << ", nw=" << nw << ", nu=" << nu << std::endl;
     std::cout << "Initial state: " << x_.transpose() << std::endl;
 
+    // Прогноз ковариации
     const Eigen::MatrixXd P_old = P_;
     std::cout << "Initial covariance P (norm = " << P_old.norm() << "):"
               << std::endl << P_old << std::endl;
@@ -241,29 +249,12 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     }
 
     // ============================================
-    // ШАГ ПРОГНОЗА
-    // ============================================
-
-    std::cout << "\n--- Prediction Step ---" << std::endl;
-
-    // ПРОГНОЗ СОСТОЯНИЯ
-    std::cout << "\nState prediction:\n";
-    Eigen::VectorXd x_pred = A * x_ + D * u;
-    std::cout << "x_pred = A*x + D*u: " << x_pred.transpose() << "\n";
-
-    // Прогноз ковариации
-    const Eigen::MatrixXd P_pred = A * P_old * A.transpose() + B * Q * B.transpose();
-    std::cout << "Predicted covariance P_pred = A*P*A' + B*Q*B' (norm = "
-              << P_pred.norm() << "):" << std::endl << P_pred << std::endl;
-
-    // ============================================
     // ВЫЧИСЛЕНИЕ КОЭФФИЦИЕНТА УСИЛЕНИЯ КАЛМАНА
     // ============================================
 
     std::cout << "\n--- Kalman Gain Computation ---" << std::endl;
 
-    // Матрица ковариации инноваций
-    Eigen::MatrixXd S = C * P_pred * C.transpose() + R;
+    Eigen::MatrixXd S = C * P_old * C.transpose() + R;
     std::cout << "Innovation covariance S = C*P_pred*C' + R:"
               << std::endl << S << std::endl;
 
@@ -277,24 +268,27 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
         S += Eigen::MatrixXd::Identity(ny, ny) * 1e-8;
     }
 
-    // Вычисление коэффициента усиления Калмана
-    Eigen::MatrixXd K;
-    try {
-        // Используем LDLT разложение для устойчивого обращения
-        Eigen::LDLT<Eigen::MatrixXd> ldlt_S(S);
-        if (ldlt_S.info() != Eigen::Success) {
-            throw std::runtime_error("Failed to decompose S matrix");
-        }
-        K = P_pred * C.transpose() * ldlt_S.solve(Eigen::MatrixXd::Identity(ny, ny));
-    } catch (const std::exception& e) {
-        std::cerr << "ERROR computing Kalman gain: " << e.what()
-                  << ", using alternative method" << std::endl;
-        // Альтернативный метод через псевдообращение
-        K = P_pred * C.transpose() * (S + Eigen::MatrixXd::Identity(ny, ny) * 1e-6).inverse();
+    // Проверка S
+    Eigen::LLT<Eigen::MatrixXd> llt_S(S);
+    if (llt_S.info() != Eigen::Success) {
+        std::cout << "WARNING: S not positive definite!\n";
+        S += Eigen::MatrixXd::Identity(ny, ny) * 1e-8;
     }
 
+    Eigen::MatrixXd K = A * P_old * C.transpose() * S.inverse();
     std::cout << "Kalman gain K = P_pred*C'*inv(S):" << std::endl << K << std::endl;
     std::cout << "K norm: " << K.norm() << std::endl;
+
+    // ============================================
+    // ШАГ ПРОГНОЗА
+    // ============================================
+
+    std::cout << "\n--- Prediction Step ---" << std::endl;
+
+    // ПРОГНОЗ СОСТОЯНИЯ
+    std::cout << "\nState prediction:\n";
+    Eigen::VectorXd x_pred = A * x_ + D * u;
+    std::cout << "x_pred = A*x + D*u: " << x_pred.transpose() << "\n";
 
     // ============================================
     // ШАГ КОРРЕКЦИИ
@@ -308,10 +302,11 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     std::cout << "Innovation norm: " << innov.norm() << std::endl;
 
     // Обновление состояния
-    const Eigen::VectorXd x_old = x_;
-    x_ = x_pred + K * innov;
+    Eigen::VectorXd x_corr = x_pred + K * innov;
     std::cout << "Corrected state x_new = x_pred + K*innov: "
-              << x_.transpose() << std::endl;
+              << x_corr.transpose() << std::endl;
+    Eigen::VectorXd x_old = x_;
+    x_ = x_corr;
 
     // ============================================
     // ОБНОВЛЕНИЕ КОВАРИАЦИИ (ФОРМУЛА ДЖОЗЕФА)
@@ -320,21 +315,20 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     std::cout << "\n--- Covariance Update (Joseph Form) ---" << std::endl;
 
     Eigen::MatrixXd I_nx = Eigen::MatrixXd::Identity(nx, nx);
-    Eigen::MatrixXd I_KC = I_nx - K * C;
+    Eigen::MatrixXd I_KC = I_nx - P_old * C.transpose() * S.inverse() * C;
+    std::cout << "I - K*C:\n" << I_KC << "\n";
 
-    // Формула Джозефа для численной устойчивости
-    Eigen::MatrixXd P_next =
-            (I_KC * P_pred * I_KC.transpose()) + (K * R * K.transpose());
-
-    std::cout << "Updated covariance P_new (norm = " << P_next.norm() << "):"
-              << std::endl << P_next << std::endl;
+    Eigen::MatrixXd P_next = A * I_KC * P_old * A.transpose() + B * Q * B.transpose();
+    std::cout << "P_next = A*I_KC*P*A' + B*Q*B':\n" << P_next << "\n";
+    std::cout << "Norm: " << P_next.norm() << "\n";
 
     // ============================================
     // ПОСТОБРАБОТКА И ВАЛИДАЦИЯ
     // ============================================
 
-    // Гарантируем симметричность
+    // Симметризация
     P_ = 0.5 * (P_next + P_next.transpose());
+    std::cout << "After symmetrization:\n" << P_ << "\n";
 
     // Проверка положительной определенности
     Eigen::LLT<Eigen::MatrixXd> llt_final(P_);
@@ -356,13 +350,13 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     // ============================================
     // СРАВНЕНИЕ С SRCF (ДЛЯ ОТЛАДКИ)
     // ============================================
-
-    std::cout << "\n=== Summary for SRCF Comparison ===" << std::endl;
-    std::cout << "P_old (should match SRCF P_old):" << std::endl << P_old << std::endl;
-    std::cout << "K (should match SRCF K):" << std::endl << K << std::endl;
-    std::cout << "Old state: " << x_old.transpose() << std::endl;
-    std::cout << "New state: " << x_.transpose() << std::endl;
-    std::cout << "Final covariance P_new:" << std::endl << P_ << std::endl;
+    std::cout << "\n=== FOR SRCF COMPARISON (CKF Summary) ===\n";
+    std::cout << "P_old (should match SRCF P_old):\n" << P_old << "\n";
+    std::cout << "K (should match SRCF K = G*inv(S_Re)):\n" << K << "\n";
+    std::cout << "Old x state: " << x_old.transpose() << "\n";
+    std::cout << "New x state: " << x_.transpose() << "\n";
+    std::cout << "Final covariance P_new (should match SRCF P_new):\n" << P_ << "\n";
+    std::cout << "True state (A*[0,0] + B*u): " << (A * Eigen::Vector2d::Zero() + D * u).transpose() << "\n";
 
     // ============================================
     // ПРОВЕРКИ И ВАЛИДАЦИЯ
@@ -374,14 +368,14 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     Eigen::LLT<Eigen::MatrixXd> llt_old(P_old);
     Eigen::LLT<Eigen::MatrixXd> llt_new(P_);
 
-    std::cout << "P_old positive definite: "
-              << (llt_old.info() == Eigen::Success ? "YES" : "NO") << std::endl;
+    std::cout << "P_pred positive definite: "
+              << (llt_old.info() == Eigen::Success ? "YES" : "NO") << "\n";
     std::cout << "P_new positive definite: "
-              << (llt_new.info() == Eigen::Success ? "YES" : "NO") << std::endl;
+              << (llt_new.info() == Eigen::Success ? "YES" : "NO") << "\n";
 
-    // Проверка симметричности
-    const double asym_old = (P_old - P_old.transpose()).norm() / P_old.norm();
-    const double asym_new = (P_ - P_.transpose()).norm() / P_.norm();
+    // Проверка симметрии
+    double asym_old = (P_old - P_old.transpose()).norm() / P_old.norm();
+    double asym_new = (P_ - P_.transpose()).norm() / P_.norm();
 
     std::cout << "P_old asymmetry: " << asym_old
               << (asym_old < 1e-12 ? " (OK)" : " (WARNING)") << std::endl;

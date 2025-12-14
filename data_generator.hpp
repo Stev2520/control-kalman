@@ -590,10 +590,10 @@ namespace data_generator {
 
             metrics.average_error = std::accumulate(metrics.error_history.begin(),
                                                     metrics.error_history.end(), 0.0)
-                                    / metrics.error_history.size();
+                                    / static_cast<double>(metrics.error_history.size());
 
-            metrics.rms_error = std::sqrt(sum_sq_error / metrics.error_history.size());
-            metrics.cov_norm = sum_cov_norm / covariances.size();
+            metrics.rms_error = std::sqrt(sum_sq_error / static_cast<double>(metrics.error_history.size()));
+            metrics.cov_norm = sum_cov_norm / static_cast<double>(covariances.size());
 
             // Усредняем только по корректным вычислениям
             metrics.cond_number = (valid_cond_count > 0) ?
@@ -670,13 +670,13 @@ namespace data_generator {
             if (data.ckf_metrics.cov_norm > 1e-14) {
                 data.comparison.cov_norm_ratio = data.srcf_metrics.cov_norm / data.ckf_metrics.cov_norm;
             }
-
-            data.comparison.avg_absolute_difference = sum_abs_diff / n;
-            data.comparison.percentage_srcf_better = (static_cast<double>(srcf_better_count) / n) * 100.0;
+            auto n_new = static_cast<double>(n);
+            data.comparison.avg_absolute_difference = sum_abs_diff / n_new;
+            data.comparison.percentage_srcf_better = (static_cast<double>(srcf_better_count) / n_new) * 100.0;
 
             // Стандартное отклонение разницы
-            double mean_diff = sum_diff / n;
-            data.comparison.std_dev_difference = std::sqrt((sum_sq_diff / n) - (mean_diff * mean_diff));
+            double mean_diff = sum_diff / n_new;
+            data.comparison.std_dev_difference = std::sqrt((sum_sq_diff / n_new) - (mean_diff * mean_diff));
             log("[Comparison] SRCF is better in " + std::to_string(data.comparison.percentage_srcf_better) + "% of steps");
         }
 
@@ -737,8 +737,9 @@ namespace data_generator {
             }
 
             // Заголовок
-            file << "time,true_phi,true_p,meas_phi_exact,meas_p_exact,"
-                 << "meas_phi_noisy,meas_p_noisy,control,";
+            file << "time,true_phi,true_p,"
+                 << "meas_gyro_exact,meas_accel_exact,"  // Гироскоп и акселерометр
+                 << "meas_gyro_noisy,meas_accel_noisy,control,";
 
             if (config_.test_ckf) {
                 file << "ckf_phi,ckf_p,";
@@ -1052,8 +1053,8 @@ namespace data_generator {
                 if (srcf_error > srcf_max_error) srcf_max_error = srcf_error;
             }
 
-            double ckf_avg_error = ckf_total_error / ckf_errors.size();
-            double srcf_avg_error = srcf_total_error / srcf_errors.size();
+            double ckf_avg_error = ckf_total_error / static_cast<double>(ckf_errors.size());
+            double srcf_avg_error = srcf_total_error / static_cast<double>(srcf_errors.size());
 
             // Вычисляем RMS
             double ckf_rms = 0.0;
@@ -1062,8 +1063,8 @@ namespace data_generator {
                 ckf_rms += ckf_errors[i] * ckf_errors[i];
                 srcf_rms += srcf_errors[i] * srcf_errors[i];
             }
-            ckf_rms = sqrt(ckf_rms / ckf_errors.size());
-            srcf_rms = sqrt(srcf_rms / srcf_errors.size());
+            ckf_rms = sqrt(ckf_rms / static_cast<double>(ckf_errors.size()));
+            srcf_rms = sqrt(srcf_rms / static_cast<double>(srcf_errors.size()));
 
             file << std::fixed << std::setprecision(6);
             file << "CKF Statistics:\n";
@@ -1304,9 +1305,10 @@ namespace data_generator {
             if (!file.is_open()) {
                 throw std::runtime_error("Cannot open file: " + filename);
             }
-            const size_t n = vec.size();
-            file.write(reinterpret_cast<const char*>(&n), sizeof(size_t));
-            file.write(reinterpret_cast<const char*>(vec.data()), n * sizeof(double));
+            const auto n = static_cast<std::streamsize>(vec.size());
+            const auto data_size = static_cast<std::streamsize>(n * sizeof(double));
+            file.write(reinterpret_cast<const char*>(vec.size()), sizeof(decltype(vec.size())));
+            file.write(reinterpret_cast<const char*>(vec.data()), data_size);
             file.close();
         }
 

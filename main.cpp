@@ -67,7 +67,9 @@ void generate_all_formats()
     for (const auto& [format, name] : formats) {
         auto config = base_config;
         config.format = format;
-        config.output_dir = root_dir + "/" + name;
+        config.output_dir = root_dir;
+        config.output_dir += "/";
+        config.output_dir += name;
 
         std::cout << "\nGenerating " << name << " format...\n";
 
@@ -159,7 +161,7 @@ void generate_all_formats()
         std::cout << "Binary total size: " << binary_total << " bytes\n";
         std::cout << "TXT total size: " << txt_total << " bytes\n";
         if (binary_total > 0) {
-            const double compression_ratio = static_cast<double>(txt_total) / binary_total;
+            const double compression_ratio = static_cast<double>(txt_total) / static_cast<double>(binary_total);
             std::cout << "Compression ratio (TXT/Binary): " << compression_ratio << "\n";
         }
     }
@@ -300,7 +302,7 @@ void run_verhaegen_tests()
     summary_file << "Test,ProcessNoise,MeasNoise,CKF_AvgError,SRCF_AvgError,CKF_RMS,SRCF_RMS,"
                  << "CKF_Asymmetry,SRCF_Asymmetry,CKF_PosDef,SRCF_PosDef\n";
 
-    for (int test_num = 0; test_num < noise_levels.size(); ++test_num) {
+    for (size_t test_num = 0; test_num < noise_levels.size(); ++test_num) {
         auto [process_scale, meas_scale] = noise_levels[test_num];
 
         data_generator::SimulationConfig config;
@@ -359,10 +361,10 @@ void run_verhaegen_tests()
                 if (llt_srcf.info() == Eigen::Success) srcf_posdef++;
             }
 
-            ckf_avg /= data.true_states.size();
-            srcf_avg /= data.true_states.size();
-            ckf_rms = std::sqrt(ckf_rms / data.true_states.size());
-            srcf_rms = std::sqrt(srcf_rms / data.true_states.size());
+            ckf_avg /= static_cast<double>(data.true_states.size());
+            srcf_avg /= static_cast<double>(data.true_states.size());
+            ckf_rms = std::sqrt(ckf_rms / static_cast<double>(data.true_states.size()));
+            srcf_rms = std::sqrt(srcf_rms / static_cast<double>(data.true_states.size()));
 
             summary_file << test_num + 1 << ","
                          << process_scale << "," << meas_scale << ","
@@ -585,26 +587,43 @@ void test_model_comparison()
  */
 void test_basic()
 {
-    std::cout << "\n=== TEST 8: WITH PROCESS AND MEASUREMENT NOISE ===\n";
+//    std::cout << "\n=== TEST 8: WITH PROCESS AND MEASUREMENT NOISE ===\n";
+//    data_generator::SimulationConfig config;
+//    config.total_steps = 100;  // Увеличим для статистики
+//    config.base_dt = 0.02;
+//    config.add_process_noise = true;
+//    config.add_measurement_noise = true;
+//    config.process_noise_scale = 1.0;      // Стандартный масштаб
+//    config.measurement_noise_scale = 1.0;  // Стандартный масштаб
+//    config.model_type = data_generator::ModelType::MODEL2;
+//    config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
+//    config.time_mode = time_generator::TimeMode::UNIFORM;
+//    config.format = data_generator::DataFormat::TEXT_TXT;
+////    config.format = data_generator::DataFormat::TEXT_CSV;
+//    config.output_dir = "./data/test_with_noise";
+//    config.test_ckf = true;
+//    config.use_custom_initial = true;
+//    config.initial_state << 1, 2;
+//    config.initial_covariance << 0.01, 0.0,
+//            0.0, 0.01;
+//    config.seed = 77777;
+//    run_test("Test with Noise", config, config.seed);
+
+    std::cout << "\n=== TEST 11: PROCESS NOISE ONLY ===\n";
+
     data_generator::SimulationConfig config;
-    config.total_steps = 100;  // Увеличим для статистики
+    config.total_steps = 150;
     config.base_dt = 0.02;
-    config.add_process_noise = true;
-    config.add_measurement_noise = true;
-    config.process_noise_scale = 1.0;      // Стандартный масштаб
-    config.measurement_noise_scale = 1.0;  // Стандартный масштаб
-    config.model_type = data_generator::ModelType::MODEL2;
+    config.add_process_noise = true;       // Только шум процесса
+    config.add_measurement_noise = false;  // Нет шума измерений
+    config.process_noise_scale = 3.0;      // Средний шум процесса
+    config.measurement_noise_scale = 0.0;
     config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
     config.time_mode = time_generator::TimeMode::UNIFORM;
-    config.format = data_generator::DataFormat::TEXT_TXT;
-    config.output_dir = "./data/test_with_noise";
-    config.test_ckf = true;
-    config.use_custom_initial = true;
-    config.initial_state = Eigen::Vector2d::Zero();
-    config.initial_covariance << 0.1, 0.0,
-            0.0, 0.1;
-    config.seed = 12345;
-    run_test("Test with Noise", config, config.seed);
+    config.format = data_generator::DataFormat::TEXT_CSV;
+    config.output_dir = "./data/test_process_noise";
+    config.use_custom_initial = false;
+    run_test("Process Noise Only", config, 11111);
 }
 
 // ============================================================================
@@ -645,7 +664,7 @@ void test_performance() {
         std::cout << "Performance results:\n";
         std::cout << "  Steps processed: " << config.total_steps << "\n";
         std::cout << "  Total time: " << duration.count() << " ms\n";
-        std::cout << "  Time per step: " << static_cast<double>(duration.count()) / config.total_steps << " ms\n";
+        std::cout << "  Time per step: " << static_cast<double>(duration.count()) / static_cast<double>(config.total_steps) << " ms\n";
         std::cout << "  Data saved to: " << config.output_dir << "\n";
 
     } catch (const std::exception& e) {
@@ -834,6 +853,10 @@ int main() {
                 data_generator::SimulationConfig config = create_custom_config();
                 run_test("Custom Test", config, 88888);
             }
+                break;
+            default:
+                std::cout << "Invalid choice. Running basic test...\n";
+                test_basic();
                 break;
         }
 

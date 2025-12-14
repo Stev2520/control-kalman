@@ -103,6 +103,7 @@ __pycache__/
 .Python
 env/
 venv/
+KalmanVenv/
 ENV/
 env.bak/
 venv.bak/

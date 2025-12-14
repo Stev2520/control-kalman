@@ -58,7 +58,7 @@ namespace time_generator {
         std::default_random_engine gen_;                 /**< Генератор случайных чисел */
         std::uniform_real_distribution<double> uniform_dist_; /**< Равномерное распределение */
         std::normal_distribution<double> normal_dist_;   /**< Нормальное распределение */
-        int current_seed_;
+        int current_seed_{};
 
     public:
         /**
@@ -74,10 +74,10 @@ namespace time_generator {
          * @note Нормальное распределение настроено со средним 0 и
          *       стандартным отклонением 0.005.
          */
-        explicit TimeGenerator(int seed = std::random_device{}())
-                : gen_(seed), current_seed_(seed)  // Сохраняем seed
-                , uniform_dist_(0.001, 0.05)
-                , normal_dist_(0.0, 0.005) {}
+        explicit TimeGenerator(auto seed = static_cast<int>(std::random_device{}()))
+                : gen_(seed), uniform_dist_(0.001, 0.05)  // Сохраняем seed
+                , normal_dist_(0.0, 0.005)
+                , current_seed_(seed) {}
 
         /**
          * @brief Генерирует временную сетку
@@ -110,7 +110,7 @@ namespace time_generator {
             times.reserve(n_steps);
             double t = 0.0;
             times.push_back(t);
-            for (size_t i = 1; i < n_steps; ++i) {
+            for (size_t i = 1; i <= n_steps; ++i) {
                 double dt = dt_base;
                 switch (mode) {
                     case TimeMode::UNIFORM:
@@ -200,14 +200,7 @@ namespace time_generator {
             return times;
         }
 
-        void reset(int seed) {
-            gen_.seed(seed);
-            current_seed_ = seed;
-            uniform_dist_.reset();
-            normal_dist_.reset();
-        }
-
-        int get_current_seed() const { return current_seed_; }
+        [[nodiscard]] int get_current_seed() const { return current_seed_; }
     };
 } // namespace time_generator
 
