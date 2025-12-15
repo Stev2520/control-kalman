@@ -67,7 +67,6 @@ namespace data_generator {
         bool add_measurement_noise = true;         /**< Добавлять шум измерений */
         double process_noise_scale = 1.0;          /**< Масштаб шума процесса */
         double measurement_noise_scale = 1.0;      /**< Масштаб шума измерений */
-
         ModelType model_type = ModelType::MODEL2;  /**< Тип используемой модели */
         union {
             model0::ControlScenario scenario0;     /**< Сценарий управления для MODEL0 */
@@ -133,7 +132,6 @@ namespace data_generator {
             std::vector<double> error_differences; /**< Разности ошибок на каждом шаге (SRCF - CKF) */
             std::vector<double> relative_differences; /**< Относительные разности ошибок (%) */
         };
-
         ComparisonMetrics comparison; /**< Метрики сравнения фильтров */
     };
 // ============================================================================
@@ -405,10 +403,8 @@ namespace data_generator {
         void generate_with_model2(SimulationData& data)
         {
             log("[DataGenerator] Generating with MODEL2");
-
             Eigen::Vector2d x_true;
             Eigen::Matrix2d P0;
-
             if (config_.use_custom_initial) {
                 x_true = config_.initial_state;
                 P0 = config_.initial_covariance;
@@ -576,14 +572,14 @@ namespace data_generator {
                     std::cout << "[DEBUG] Step " << i << " condition number calculation:" << std::endl;
                     std::cout << "  singular values: " << singular_values.transpose() << std::endl;
                     std::cout << "  min_sv: " << min_sv << ", max_sv: " << max_sv << std::endl;
-                    if (min_sv > 1e-10 && max_sv > 1e-10) {
+                    if (min_sv > 1e-17 && max_sv > 1e-17) {
                         std::cout << "  condition number: " << max_sv / min_sv << std::endl;
                     } else {
                         std::cout << "  matrix is ill-conditioned or singular" << std::endl;
                     }
                 }
 
-                if (min_sv > 1e-10 && max_sv > 1e-10) {
+                if (min_sv > 1e-17 && max_sv > 1e-17) {
                     double cond = max_sv / min_sv;
 
                     // Ограничиваем cond разумным значением
@@ -592,9 +588,6 @@ namespace data_generator {
                         valid_cond_count++;
                     }
                 }
-//                if (i > 100 && error < 0.01 && metrics.convergence_time == 0.0) {
-//                    metrics.convergence_time = times[i];
-//                }
                 const int window_size = 50;
                 if (i >= window_size) {
                     double window_avg = 0.0;
@@ -602,7 +595,6 @@ namespace data_generator {
                         window_avg += metrics.error_history[i - j];
                     }
                     window_avg /= window_size;
-
                     if (window_avg < 0.01 && metrics.convergence_time == 0.0) {
                         metrics.convergence_time = times[i];
                     }
@@ -650,10 +642,8 @@ namespace data_generator {
                 data.comparison.error_differences.push_back(diff);
 
                 // Относительная разница в процентах
-//                const double rel_diff = (ckf_error > 1e-10) ?
-//                                        (diff / ckf_error) * 100.0 : 0.0;
                 const double avg_error = (ckf_error + srcf_error) / 2.0;
-                const double rel_diff = (avg_error > 1e-10) ?
+                const double rel_diff = (avg_error > 1e-17) ?
                                         (diff / avg_error) * 100.0 : 0.0;
                 data.comparison.relative_differences.push_back(rel_diff);
 
@@ -675,19 +665,19 @@ namespace data_generator {
             }
             data.comparison.avg_error_ratio = data.srcf_metrics.average_error /
                                               data.ckf_metrics.average_error;
-            if (data.ckf_metrics.rms_error > 1e-14) {
+            if (data.ckf_metrics.rms_error > 1e-17) {
                 data.comparison.rms_error_ratio = data.srcf_metrics.rms_error / data.ckf_metrics.rms_error;
             }
 
-            if (data.ckf_metrics.max_error > 1e-14) {
+            if (data.ckf_metrics.max_error > 1e-17) {
                 data.comparison.max_error_ratio = data.srcf_metrics.max_error / data.ckf_metrics.max_error;
             }
 
-            if (data.ckf_metrics.cond_number > 1e-14) {
+            if (data.ckf_metrics.cond_number > 1e-17) {
                 data.comparison.cond_number_ratio = data.srcf_metrics.cond_number / data.ckf_metrics.cond_number;
             }
 
-            if (data.ckf_metrics.cov_norm > 1e-14) {
+            if (data.ckf_metrics.cov_norm > 1e-17) {
                 data.comparison.cov_norm_ratio = data.srcf_metrics.cov_norm / data.ckf_metrics.cov_norm;
             }
             auto n_new = static_cast<double>(n);
@@ -764,7 +754,7 @@ namespace data_generator {
                 file << "ckf_cov_11,ckf_cov_12,ckf_cov_21,ckf_cov_22,";
             }
             file << "srcf_cov_11,srcf_cov_12,srcf_cov_21,srcf_cov_22\n";
-            file << std::fixed << std::setprecision(15);
+            file << std::fixed << std::setprecision(20);
 
             for (size_t i = 0; i < data.times.size() - 1; ++i) {
                 file << data.times[i] << ","
@@ -902,7 +892,7 @@ namespace data_generator {
             file << "KALMAN FILTER SIMULATION DATA\n";
             file << "========================================\n\n";
 
-            file << std::fixed << std::setprecision(15);
+            file << std::fixed << std::setprecision(20);
             file << std::setw(12) << "Time(s)"
                  << std::setw(15) << "True_phi"
                  << std::setw(15) << "True_p"
@@ -949,26 +939,24 @@ namespace data_generator {
             file << "========================================\n";
             file << "COVARIANCE MATRICES\n";
             file << "========================================\n\n";
-            file << std::fixed << std::setprecision(15);
+            file << std::fixed << std::setprecision(20);
             for (size_t i = 0; i < std::min(data.times.size() - 1, (size_t)20); ++i) {
-                if (i % 10 == 0) {  // Каждые 10 шагов
-                    file << "\nStep " << i << " (t = " << data.times[i] << " s):\n";
-                    if (config_.test_ckf) {
-                        file << "CKF Covariance:\n";
-                        file << "  [" << data.ckf_covariances[i](0,0) << ", "
-                             << data.ckf_covariances[i](0,1) << "]\n";
-                        file << "  [" << data.ckf_covariances[i](1,0) << ", "
-                             << data.ckf_covariances[i](1,1) << "]\n";
-                        file << "  Determinant: " << data.ckf_covariances[i].determinant() << "\n";
-                    }
-                    file << "SRCF Covariance:\n";
-                    file << "  [" << data.srcf_covariances[i](0,0) << ", "
-                         << data.srcf_covariances[i](0,1) << "]\n";
-                    file << "  [" << data.srcf_covariances[i](1,0) << ", "
-                         << data.srcf_covariances[i](1,1) << "]\n";
-                    file << "  Determinant: " << data.srcf_covariances[i].determinant() << "\n";
-                    file << std::string(50, '-') << "\n";
+                file << "\nStep " << i << " (t = " << data.times[i] << " s):\n";
+                if (config_.test_ckf) {
+                    file << "CKF Covariance:\n";
+                    file << "  [" << data.ckf_covariances[i](0,0) << ", "
+                         << data.ckf_covariances[i](0,1) << "]\n";
+                    file << "  [" << data.ckf_covariances[i](1,0) << ", "
+                         << data.ckf_covariances[i](1,1) << "]\n";
+                    file << "  Determinant: " << data.ckf_covariances[i].determinant() << "\n";
                 }
+                file << "SRCF Covariance:\n";
+                file << "  [" << data.srcf_covariances[i](0,0) << ", "
+                     << data.srcf_covariances[i](0,1) << "]\n";
+                file << "  [" << data.srcf_covariances[i](1,0) << ", "
+                     << data.srcf_covariances[i](1,1) << "]\n";
+                file << "  Determinant: " << data.srcf_covariances[i].determinant() << "\n";
+                file << std::string(50, '-') << "\n";
             }
             file.close();
         }
@@ -988,7 +976,7 @@ namespace data_generator {
             file << "MEASUREMENT DATA\n";
             file << "========================================\n\n";
 
-            file << std::fixed << std::setprecision(15);
+            file << std::fixed << std::setprecision(20);
             file << std::setw(12) << "Time(s)"
                  << std::setw(20) << "Exact_Measurement1"
                  << std::setw(20) << "Exact_Measurement2"
@@ -1052,7 +1040,7 @@ namespace data_generator {
             }
             ckf_rms = sqrt(ckf_rms / static_cast<double>(ckf_errors.size()));
             srcf_rms = sqrt(srcf_rms / static_cast<double>(srcf_errors.size()));
-            file << std::fixed << std::setprecision(15);
+            file << std::fixed << std::setprecision(20);
             file << "CKF Statistics:\n";
             file << "  Average error: " << ckf_avg_error << "\n";
             file << "  Maximum error: " << ckf_max_error << "\n";
@@ -1089,7 +1077,7 @@ namespace data_generator {
 
             for (size_t i = 0; i < std::min((size_t)50, ckf_errors.size()); i += 5) {
                 double diff = srcf_errors[i] - ckf_errors[i];
-                double rel_diff = (ckf_errors[i] > 1e-10) ?
+                double rel_diff = (ckf_errors[i] > 1e-17) ?
                                   (diff / ckf_errors[i]) * 100.0 : 0.0;
 
                 file << std::setw(8) << i
@@ -1118,6 +1106,8 @@ namespace data_generator {
 
                 if (data.comparison.avg_error_ratio < 1.0) {
                     file << "  -> SRCF is " << (1.0 - data.comparison.avg_error_ratio) * 100.0
+                         << "% better on average\n";
+                    file << "  -> CKF is " << data.comparison.avg_error_ratio * 100.0
                          << "% better on average\n";
                 } else {
                     file << "  -> CKF is " << (data.comparison.avg_error_ratio - 1.0) * 100.0
@@ -1189,7 +1179,7 @@ namespace data_generator {
         {
             std::ofstream file(filename);
             file << "=== FILTER PERFORMANCE METRICS ===\n\n";
-            file << std::fixed << std::setprecision(15);
+            file << std::fixed << std::setprecision(20);
             if (config_.test_ckf) {
                 file << "CKF:\n";
                 file << "  Average error: " << data.ckf_metrics.average_error << "\n";
@@ -1380,7 +1370,7 @@ namespace data_generator {
             if (i < data.srcf_covariances.size()) {
                 Eigen::JacobiSVD<Eigen::Matrix2d> svd_srcf(data.srcf_covariances[i]);
                 const Eigen::Vector2d& sv_srcf = svd_srcf.singularValues();
-                if (sv_srcf.minCoeff() > 1e-15) {
+                if (sv_srcf.minCoeff() > 1e-17) {
                     const double cond_srcf = sv_srcf.maxCoeff() / sv_srcf.minCoeff();
                     if (cond_srcf < 1e15) {
                         avg_cond_srcf += cond_srcf;
@@ -1390,7 +1380,7 @@ namespace data_generator {
                 if (test_ckf && i < data.ckf_covariances.size()) {
                     Eigen::JacobiSVD<Eigen::Matrix2d> svd_ckf(data.ckf_covariances[i]);
                     const Eigen::Vector2d& sv_ckf = svd_ckf.singularValues();
-                    if (sv_ckf.minCoeff() > 1e-15) {
+                    if (sv_ckf.minCoeff() > 1e-17) {
                         const double cond_ckf = sv_ckf.maxCoeff() / sv_ckf.minCoeff();
                         if (cond_ckf < 1e15) {
                             avg_cond_ckf += cond_ckf;
@@ -1414,13 +1404,15 @@ namespace data_generator {
         // 3. Анализ разницы ошибок
         if (test_ckf) {
             std::cout << "\n=== ERROR DIFFERENCE ANALYSIS ===\n";
-            std::cout << std::fixed << std::setprecision(15);
+            std::cout << std::fixed << std::setprecision(20);
             std::cout << "Average error ratio (SRCF/CKF): " << data.comparison.avg_error_ratio << "\n";
             std::cout << "RMS error ratio (SRCF/CKF): " << data.comparison.rms_error_ratio << "\n";
             std::cout << "Max error ratio (SRCF/CKF): " << data.comparison.max_error_ratio << "\n";
 
             if (data.comparison.avg_error_ratio < 1.0) {
                 std::cout << "-> SRCF performs " << (1.0 - data.comparison.avg_error_ratio) * 100.0
+                          << "% better on average\n";
+                std::cout << "-> CKF performs " << data.comparison.avg_error_ratio * 100.0
                           << "% better on average\n";
             } else {
                 std::cout << "-> CKF performs " << (data.comparison.avg_error_ratio - 1.0) * 100.0
@@ -1439,7 +1431,7 @@ namespace data_generator {
 
         // 4. Сравнение производительности фильтров
         std::cout << "\n=== FILTER PERFORMANCE COMPARISON ===\n";
-        std::cout << std::fixed << std::setprecision(15);
+        std::cout << std::fixed << std::setprecision(20);
 
         if (test_ckf) {
             std::cout << "\nCKF Metrics:\n";

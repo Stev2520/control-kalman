@@ -235,21 +235,13 @@ void run_test(const std::string& test_name,
     local_config.seed = seed;
 
     try {
-        // Генерируем данные
         data_generator::DataGenerator gen(local_config, seed);
         auto data = gen.generate();
-
-        // Сохраняем данные
         gen.save(data);
-
-        // Анализируем в стиле Verhaegen & Van Dooren
         data_generator::analyze_verhaegen_style(data, config.test_ckf);
-
-        // Сохраняем сравнение в CSV (если тестируется CKF)
         if (config.test_ckf && !data.ckf_estimates.empty()) {
             const std::string csv_file = config.output_dir + "/comparison.csv";
             std::ofstream comparison_file(csv_file);
-
             comparison_file << "Step,Time,CKF_Error,SRCF_Error,CKF_Cov_Norm,SRCF_Cov_Norm,"
                             << "CKF_Cond_Number,SRCF_Cond_Number,Error_Diff,Rel_Diff_Percent,Innovation\n";
 
@@ -270,7 +262,7 @@ void run_test(const std::string& test_name,
                 double srcf_cov_norm = (i < data.srcf_covariances.size()) ?
                                        data.srcf_covariances[i].norm() : 0.0;
 
-                // Числа обусловленности (нужно их предварительно вычислить и сохранить)
+                // Числа обусловленности
                 double ckf_cond = 1.0;
                 double srcf_cond = 1.0;
                 if (i < data.ckf_covariances.size()) {
@@ -290,7 +282,7 @@ void run_test(const std::string& test_name,
 
                 // Разница ошибок
                 double error_diff = srcf_error - ckf_error;
-                double rel_diff = (ckf_error > 1e-10) ?
+                double rel_diff = (ckf_error > 1e-15) ?
                                   (error_diff / ckf_error) * 100.0 : 0.0;
 
                 double innovation = 0.0;
@@ -300,12 +292,11 @@ void run_test(const std::string& test_name,
                     innovation = innov.norm();
                 }
 
-                comparison_file << i << "," << std::setprecision(15) << time << ","
+                comparison_file << i << "," << std::setprecision(20) << time << ","
                                 << ckf_error << "," << srcf_error << ","
                                 << ckf_cov_norm << "," << srcf_cov_norm << ","
                                 << ckf_cond << "," << srcf_cond << ","
                                 << error_diff << "," << rel_diff << "," << innovation << "\n";
-
             }
             comparison_file.close();
         }
@@ -325,7 +316,6 @@ void run_test(const std::string& test_name,
 void run_verhaegen_tests()
 {
     std::cout << "\n=== TEST SERIES 1: NOISE LEVEL TESTS (Verhaegen Style) ===\n";
-
     std::vector<std::pair<double, double>> noise_levels = {
             {0.1, 0.1},     // Test 1: Low noise
             {1.0, 1.0},     // Test 2: Moderate noise
@@ -341,7 +331,6 @@ void run_verhaegen_tests()
 
     for (size_t test_num = 0; test_num < noise_levels.size(); ++test_num) {
         auto [process_scale, meas_scale] = noise_levels[test_num];
-
         data_generator::SimulationConfig config;
         config.total_steps = 2000;
         config.base_dt = 0.01;
@@ -356,13 +345,10 @@ void run_verhaegen_tests()
         config.use_custom_initial = false;
         config.seed = 12345 + static_cast<int>(test_num);
         config.output_dir = "./data/verhaegen_test_" + std::to_string(test_num + 1);
-
         std::string test_name = "Verhaegen Test " + std::to_string(test_num + 1) +
                                 " (Proc=" + std::to_string(process_scale) +
                                 ", Meas=" + std::to_string(meas_scale) + ")";
-
         run_test(test_name, config, config.seed);
-
         try {
             // Для сводного файла нужно прочитать метрики
             data_generator::DataGenerator gen(config, 12345 + static_cast<int>(test_num));
@@ -503,7 +489,6 @@ void test_different_scenarios()
 void test_different_time_modes()
 {
     std::cout << "\n=== TEST SERIES 4: DIFFERENT TIME MODES ===\n";
-
     std::vector<std::pair<time_generator::TimeMode, std::string>> time_modes = {
             {time_generator::TimeMode::UNIFORM, "Uniform"},
             {time_generator::TimeMode::VARIABLE, "Variable"},
@@ -538,7 +523,6 @@ void test_different_time_modes()
 void test_unstable_system()
 {
     std::cout << "\n=== TEST 5: UNSTABLE SYSTEM (Verhaegen Style) ===\n";
-
     data_generator::SimulationConfig config;
     config.total_steps = 2000;
     config.base_dt = 0.01;
@@ -629,7 +613,6 @@ void test_basic()
     config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
     config.time_mode = time_generator::TimeMode::UNIFORM;
     config.format = data_generator::DataFormat::TEXT_TXT;
-//    config.format = data_generator::DataFormat::TEXT_CSV;
     config.output_dir = "./data/test_with_noise";
     config.test_ckf = true;
     config.use_custom_initial = true;
@@ -913,6 +896,5 @@ int main()
     std::cout << "  • Comparison CSV files\n";
     std::cout << "  • Verhaegen-style analysis results\n";
     std::cout << "\nThank you for using Kalman Filter Comparison Suite!\n";
-
     return 0;
 }

@@ -104,6 +104,19 @@ class KalmanVisualizer:
                 print(f"✗ Ошибка загрузки CSV: {e}")
                 self.df = None
 
+        comparison_path = os.path.join(self.data_path, "comparison.csv")
+        if os.path.exists(comparison_path):
+            print(f"\n✓ Найден файл сравнений: {comparison_path}")
+            try:
+                self.comparison_df = pd.read_csv(comparison_path)
+                print(f"✓ Загружено {len(self.comparison_df)} строк сравнений")
+                print(f"  Колонки: {list(self.comparison_df.columns)}")
+
+                # Анализ данных сравнений
+                self.analyze_comparison_data()
+            except Exception as e:
+                print(f"✗ Ошибка загрузки comparison.csv: {e}")
+
         # Если CSV не найден, пробуем загрузить TXT файлы
         if self.df is None:
             txt_path = os.path.join(self.data_path, "main_data.txt")
@@ -116,7 +129,6 @@ class KalmanVisualizer:
                     print(f"✗ Ошибка загрузки TXT: {e}")
                     self.df = None
 
-        # Загружаем метрики если есть
         self.load_metrics_files()
 
         # Если данные всё ещё не загружены, создаём тестовые
@@ -124,7 +136,6 @@ class KalmanVisualizer:
             print("\n⚠ Данные не найдены, создаю тестовые данные...")
             self.create_test_data()
         else:
-            # НОВОЕ: Анализ структуры данных
             self.analyze_data_structure()
 
 
@@ -186,26 +197,53 @@ class KalmanVisualizer:
         if 'meas_gyro_exact' in self.df.columns and 'true_p' in self.df.columns:
             gyro_diff = (self.df['meas_gyro_exact'] - self.df['true_p']).abs()
             print(f"Гироскоп (meas_gyro_exact):")
-            print(f"  Отличается от true_p на: {gyro_diff.mean():.3e} ± {gyro_diff.std():.3e}")
-            print(f"  Диапазон: {self.df['meas_gyro_exact'].min():.3f} ... {self.df['meas_gyro_exact'].max():.3f}")
+            print(f"  Отличается от true_p на: {gyro_diff.mean():.15e} ± {gyro_diff.std():.15e}")
+            print(f"  Диапазон: {self.df['meas_gyro_exact'].min():.15f} ... {self.df['meas_gyro_exact'].max():.15f}")
 
         if 'meas_accel_exact' in self.df.columns and 'true_phi' in self.df.columns:
             true_accel = g * np.sin(self.df['true_phi'])
             accel_diff = (self.df['meas_accel_exact'] - true_accel).abs()
             print(f"\nАкселерометр (meas_accel_exact):")
-            print(f"  Отличается от g·sin(φ) на: {accel_diff.mean():.3e} ± {accel_diff.std():.3e}")
-            print(f"  Диапазон: {self.df['meas_accel_exact'].min():.3f} ... {self.df['meas_accel_exact'].max():.3f}")
+            print(f"  Отличается от g·sin(φ) на: {accel_diff.mean():.15e} ± {accel_diff.std():.15e}")
+            print(f"  Диапазон: {self.df['meas_accel_exact'].min():.15f} ... {self.df['meas_accel_exact'].max():.15f}")
 
         # Проверяем шум
         if 'meas_gyro_exact' in self.df.columns and 'meas_gyro_noisy' in self.df.columns:
             gyro_noise = (self.df['meas_gyro_noisy'] - self.df['meas_gyro_exact']).abs()
             print(f"\nШум гироскопа (meas_gyro_noisy - meas_gyro_exact):")
-            print(f"  Средний: {gyro_noise.mean():.3e}, Макс: {gyro_noise.max():.3e}")
+            print(f"  Средний: {gyro_noise.mean():.15e}, Макс: {gyro_noise.max():.15e}")
 
         if 'meas_accel_exact' in self.df.columns and 'meas_accel_noisy' in self.df.columns:
             accel_noise = (self.df['meas_accel_noisy'] - self.df['meas_accel_exact']).abs()
             print(f"Шум акселерометра (meas_accel_noisy - meas_accel_exact):")
-            print(f"  Средний: {accel_noise.mean():.3e}, Макс: {accel_noise.max():.3e}")
+            print(f"  Средний: {accel_noise.mean():.15e}, Макс: {accel_noise.max():.15e}")
+
+        print("="*50)
+
+    def analyze_comparison_data(self):
+        """Анализ данных сравнений"""
+        if self.comparison_df is None:
+            return
+
+        print("\n" + "="*50)
+        print("АНАЛИЗ ДАННЫХ СРАВНЕНИЙ")
+        print("="*50)
+
+        # Основные статистики
+        print(f"Средняя ошибка CKF: {self.comparison_df['CKF_Error'].mean():.15e}")
+        print(f"Средняя ошибка SRCF: {self.comparison_df['SRCF_Error'].mean():.15e}")
+        print(f"Отношение SRCF/CKF: {self.comparison_df['SRCF_Error'].mean() / self.comparison_df['CKF_Error'].mean():.15f}")
+
+        # Нормы ковариаций
+        print(f"\nНорма ковариации CKF: {self.comparison_df['CKF_Cov_Norm'].mean():.15e}")
+        print(f"Норма ковариации SRCF: {self.comparison_df['SRCF_Cov_Norm'].mean():.15e}")
+        print(f"Отношение норм SRCF/CKF: {self.comparison_df['SRCF_Cov_Norm'].mean() / self.comparison_df['CKF_Cov_Norm'].mean():.15f}")
+
+        # Числа обусловленности
+        if 'CKF_Cond_Number' in self.comparison_df.columns and 'SRCF_Cond_Number' in self.comparison_df.columns:
+            print(f"\nЧисло обусловленности CKF: {self.comparison_df['CKF_Cond_Number'].mean():.15e}")
+            print(f"Число обусловленности SRCF: {self.comparison_df['SRCF_Cond_Number'].mean():.15e}")
+            print(f"Отношение cond SRCF/CKF: {self.comparison_df['SRCF_Cond_Number'].mean() / self.comparison_df['CKF_Cond_Number'].mean():.15f}")
 
         print("="*50)
 
@@ -228,7 +266,7 @@ class KalmanVisualizer:
             print(f"⚠ Ошибка загрузки метрик: {e}")
 
     def create_test_data(self):
-        """Создание тестовых данных только если нет реальных"""
+        """Создание тестовых данных если файлы отсутствуют"""
         print("Создание тестовых данных...")
         n = 100
         t = np.linspace(0, 2, n)  # 2 секунды как в ваших данных
@@ -299,7 +337,6 @@ class KalmanVisualizer:
                 self.df['srcf_p'] = self.df['ckf_p'].copy()      # Идентичные
                 print("✓ Созданы искусственные оценки фильтров")
 
-        # Теперь рассчитываем ошибки
         self.df['ckf_error_phi'] = np.abs(self.df['ckf_phi'] - self.df['true_phi'])
         self.df['ckf_error_p'] = np.abs(self.df['ckf_p'] - self.df['true_p'])
         self.df['ckf_total_error'] = np.sqrt(self.df['ckf_error_phi']**2 + self.df['ckf_error_p']**2)
@@ -314,7 +351,7 @@ class KalmanVisualizer:
 
         # Анализ идентичности фильтров
         if 'ckf_phi' in self.df.columns and 'srcf_phi' in self.df.columns:
-            are_identical = np.allclose(self.df['ckf_phi'], self.df['srcf_phi'], atol=1e-10)
+            are_identical = np.allclose(self.df['ckf_phi'], self.df['srcf_phi'], atol=1e-15)
             print(f"✓ Фильтры идентичны по φ: {are_identical}")
 
             if are_identical:
@@ -327,7 +364,7 @@ class KalmanVisualizer:
             print("⚠ Нет данных для построения графика 1")
             return
 
-        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+        fig, axes = plt.subplots(3, 2, figsize=(15, 10))
 
         # 1. Угол phi - ВСЕГДА показываем оба фильтра
         ax = axes[0, 0]
@@ -482,7 +519,7 @@ class KalmanVisualizer:
         ax.plot(self.df['time'], srcf_cumulative, 'g--', linewidth=2, label='SRCF кумулятивная')
 
         # Определяем, где какой фильтр лучше
-        if not np.allclose(ckf_cumulative, srcf_cumulative, atol=1e-10):
+        if not np.allclose(ckf_cumulative, srcf_cumulative, atol=1e-15):
             ax.fill_between(self.df['time'], ckf_cumulative, srcf_cumulative,
                             where=(srcf_cumulative < ckf_cumulative),
                             alpha=0.3, color='green', label='SRCF лучше')
@@ -505,7 +542,7 @@ class KalmanVisualizer:
         ax.plot(self.df['time'], diff, 'purple', linewidth=1.5)
 
         # Заливка в зависимости от знака разности
-        if not np.allclose(diff, 0, atol=1e-10):
+        if not np.allclose(diff, 0, atol=1e-15):
             ax.fill_between(self.df['time'], 0, diff, where=(diff < 0),
                             alpha=0.3, color='green', label='SRCF лучше')
             ax.fill_between(self.df['time'], 0, diff, where=(diff >= 0),
@@ -523,7 +560,7 @@ class KalmanVisualizer:
         # 3. Гистограмма разностей
         ax = axes[1, 0]
 
-        if not np.allclose(diff, 0, atol=1e-10):
+        if not np.allclose(diff, 0, atol=1e-15):
             ax.hist(diff, bins=30, color='purple', alpha=0.7, edgecolor='black')
         else:
             # Если разности нулевые, показываем одну полосу
@@ -531,7 +568,7 @@ class KalmanVisualizer:
 
         ax.axvline(x=0, color='red', linestyle='--', linewidth=2, label='Нулевая разность')
         ax.axvline(x=diff.mean(), color='green', linestyle='-', linewidth=2,
-                   label=f'Среднее: {diff.mean():.2e}')
+                   label=f'Среднее: {diff.mean():.15e}')
 
         ax.set_xlabel('Разность ошибок', fontsize=11)
         ax.set_ylabel('Частота', fontsize=11)
@@ -549,7 +586,7 @@ class KalmanVisualizer:
         ax.plot(self.df['time'], ckf_ma, 'b-', linewidth=2, label=f'CKF ({window}-шаговое ср.)')
         ax.plot(self.df['time'], srcf_ma, 'g--', linewidth=2, label=f'SRCF ({window}-шаговое ср.)')
 
-        if not np.allclose(ckf_ma, srcf_ma, atol=1e-10):
+        if not np.allclose(ckf_ma, srcf_ma, atol=1e-15):
             ax.fill_between(self.df['time'], ckf_ma, srcf_ma,
                             where=(srcf_ma < ckf_ma), alpha=0.3, color='green')
         else:
@@ -604,7 +641,7 @@ class KalmanVisualizer:
             sorted_srcf = np.sort(self.df['srcf_total_error'])
 
             # Проверяем, не идентичны ли данные
-            if not np.allclose(sorted_ckf, sorted_srcf, atol=1e-10):
+            if not np.allclose(sorted_ckf, sorted_srcf, atol=1e-15):
                 ax.plot(sorted_ckf, sorted_srcf, 'bo', alpha=0.5, markersize=4)
             else:
                 ax.plot(sorted_ckf, sorted_srcf, 'ko', alpha=0.5, markersize=4, label='Идентичны')
@@ -626,9 +663,9 @@ class KalmanVisualizer:
         # 3. Процент превосходства по времени
         ax = axes[2]
 
-        better_srcf = (self.df['error_difference'] < -1e-10).sum() / len(self.df) * 100
-        better_ckf = (self.df['error_difference'] > 1e-10).sum() / len(self.df) * 100
-        equal = (np.abs(self.df['error_difference']) <= 1e-10).sum() / len(self.df) * 100
+        better_srcf = (self.df['error_difference'] < 0).sum() / len(self.df) * 100
+        better_ckf = (self.df['error_difference'] > 0).sum() / len(self.df) * 100
+        equal = (np.abs(self.df['error_difference']) == 0).sum() / len(self.df) * 100
 
         labels = ['SRCF лучше', 'CKF лучше', 'Равны']
         sizes = [better_srcf, better_ckf, equal]
@@ -645,9 +682,9 @@ class KalmanVisualizer:
 
         # Добавляем статистику в центр
         center_text = f"Всего шагов: {len(self.df)}\n"
-        center_text += f"SRCF лучше: {better_srcf:.1f}%\n"
-        center_text += f"CKF лучше: {better_ckf:.1f}%\n"
-        center_text += f"Средняя разность: {self.df['error_difference'].mean():.2e}"
+        center_text += f"SRCF лучше: {better_srcf:.3f}%\n"
+        center_text += f"CKF лучше: {better_ckf:.3f}%\n"
+        center_text += f"Средняя разность: {self.df['error_difference'].mean():.15e}"
 
         ax.text(0, 0, center_text, ha='center', va='center',
                 fontsize=9, bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
@@ -731,7 +768,7 @@ class KalmanVisualizer:
                                   label='SRCF 95% доверительная область')
                     ax.add_patch(ell)
                 except:
-                    pass  # Пропускаем если не удалось вычислить эллипсы
+                    pass
         else:
             ax.text(0.5, 0.5, 'Нет данных для анализа ошибок',
                     ha='center', va='center', transform=ax.transAxes, fontsize=12)
@@ -826,7 +863,7 @@ class KalmanVisualizer:
 
             # Добавляем значения на столбцы
             for i, value in enumerate(additional_metrics.values()):
-                ax2.text(i, value, f'{value:.3e}', ha='center', va='bottom', fontsize=9, fontweight='bold')
+                ax2.text(i, value, f'{value:.15e}', ha='center', va='bottom', fontsize=9, fontweight='bold')
         else:
             ax2.text(0.5, 0.5, 'Нет данных об измерениях', ha='center', va='center',
                      fontsize=12, transform=ax2.transAxes)
@@ -850,21 +887,298 @@ class KalmanVisualizer:
             ratio = srcf_val / ckf_val if ckf_val != 0 else float('inf')
 
             print(f"\n{metric}:")
-            print(f"  CKF:  {ckf_val:.6e}")
-            print(f"  SRCF: {srcf_val:.6e}")
+            print(f"  CKF:  {ckf_val:.15e}")
+            print(f"  SRCF: {srcf_val:.15e}")
 
-            if not np.isclose(ratio, 1.0, atol=1e-10):
+            if not np.isclose(ratio, 1.0, atol=1e-15):
                 better = "SRCF" if ratio < 1 else "CKF"
                 improvement = abs(1 - ratio) * 100
-                print(f"  Отношение (SRCF/CKF): {ratio:.6f}")
-                print(f"  {better} лучше на {improvement:.2f}%")
+                print(f"  Отношение (SRCF/CKF): {ratio:.15f}")
+                print(f"  {better} лучше на {improvement:.3f}%")
             else:
                 print(f"  Отношение (SRCF/CKF): 1.000000 (идентичны)")
 
         if additional_metrics:
             print(f"\nМетрики измерений:")
             for name, value in additional_metrics.items():
-                print(f"  {name}: {value:.6e}")
+                print(f"  {name}: {value:.15e}")
+
+    def plot_covariance_analysis(self):
+        """График 6: Анализ ковариационных матриц"""
+        if self.comparison_df is None:
+            print("⚠ Нет данных сравнений для анализа ковариаций")
+            return
+
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+
+        # 1. Нормы ковариаций
+        ax = axes[0, 0]
+        ax.plot(self.comparison_df['Time'], self.comparison_df['CKF_Cov_Norm'],
+                'b-', linewidth=1.5, label='CKF', alpha=0.7)
+        ax.plot(self.comparison_df['Time'], self.comparison_df['SRCF_Cov_Norm'],
+                'g--', linewidth=1.5, label='SRCF', alpha=0.7)
+
+        ax.set_xlabel('Время (с)', fontsize=11)
+        ax.set_ylabel('Норма ковариации', fontsize=11)
+        ax.set_title('Эволюция норм ковариационных матриц', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        # 2. Отношение норм
+        ax = axes[0, 1]
+        cov_ratio = self.comparison_df['SRCF_Cov_Norm'] / self.comparison_df['CKF_Cov_Norm']
+        ax.plot(self.comparison_df['Time'], cov_ratio, 'purple', linewidth=1.5)
+        ax.axhline(y=1.0, color='red', linestyle='--', alpha=0.5, label='Равенство')
+
+        # Среднее отношение
+        mean_ratio = cov_ratio.mean()
+        ax.axhline(y=mean_ratio, color='orange', linestyle='-', alpha=0.7,
+                   label=f'Среднее: {mean_ratio:.3f}')
+
+        ax.set_xlabel('Время (с)', fontsize=11)
+        ax.set_ylabel('Отношение норм (SRCF/CKF)', fontsize=11)
+        ax.set_title('Отношение норм ковариационных матриц', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        # 3. Числа обусловленности (если есть)
+        if 'CKF_Cond_Number' in self.comparison_df.columns:
+            ax = axes[1, 0]
+            ax.plot(self.comparison_df['Time'], self.comparison_df['CKF_Cond_Number'],
+                    'b-', linewidth=1.5, label='CKF', alpha=0.7)
+            ax.plot(self.comparison_df['Time'], self.comparison_df['SRCF_Cond_Number'],
+                    'g--', linewidth=1.5, label='SRCF', alpha=0.7)
+
+            ax.set_yscale('log')  # Логарифмическая шкала
+            ax.set_xlabel('Время (с)', fontsize=11)
+            ax.set_ylabel('Число обусловленности (log)', fontsize=11)
+            ax.set_title('Числа обусловленности ковариационных матриц', fontsize=12, fontweight='bold')
+            ax.legend(loc='best')
+            ax.grid(True, alpha=0.3)
+
+        # 4. Соотношение ошибок и норм ковариаций
+        ax = axes[1, 1]
+        error_ratio = self.comparison_df['SRCF_Error'] / self.comparison_df['CKF_Error']
+        cov_ratio = self.comparison_df['SRCF_Cov_Norm'] / self.comparison_df['CKF_Cov_Norm']
+
+        sc = ax.scatter(cov_ratio, error_ratio,
+                        c=self.comparison_df['Time'],
+                        cmap='viridis', s=30, alpha=0.7)
+
+        ax.axvline(x=1.0, color='red', linestyle='--', alpha=0.5)
+        ax.axhline(y=1.0, color='red', linestyle='--', alpha=0.5)
+
+        # Линия наилучшего соответствия
+        if len(cov_ratio) > 2:
+            try:
+                mask = (cov_ratio > 0) & (error_ratio > 0)
+                if mask.sum() > 2:
+                    slope, intercept, r_value, p_value, std_err = stats.linregress(
+                        cov_ratio[mask], error_ratio[mask]
+                    )
+                    x_fit = np.linspace(cov_ratio.min(), cov_ratio.max(), 100)
+                    y_fit = slope * x_fit + intercept
+                    ax.plot(x_fit, y_fit, 'r-', linewidth=2,
+                            label=f'Линейная аппроксимация\nНаклон: {slope:.3f}, R²: {r_value**2:.3f}')
+            except:
+                pass
+
+        ax.set_xlabel('Отношение норм ковариаций (SRCF/CKF)', fontsize=11)
+        ax.set_ylabel('Отношение ошибок (SRCF/CKF)', fontsize=11)
+        ax.set_title('Корреляция между нормами ковариаций и ошибками', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        plt.colorbar(sc, ax=ax, label='Время (с)')
+
+        plt.suptitle('Анализ ковариационных матриц фильтров Калмана', fontsize=14, fontweight='bold', y=1.02)
+        plt.tight_layout()
+
+        output_path = os.path.join(self.data_path, 'covariance_analysis.png')
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f"✓ График 6 (ковариации) сохранен: {output_path}")
+        plt.show()
+
+    def plot_numerical_stability(self):
+        """График 7: Анализ численной устойчивости в стиле Verhaegen & Van Dooren"""
+        if self.comparison_df is None:
+            print("⚠ Нет данных сравнений для анализа численной устойчивости")
+            return
+
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+
+        # 1. Динамика ошибок фильтров
+        ax = axes[0, 0]
+        ax.plot(self.comparison_df['Time'], self.comparison_df['CKF_Error'],
+                'b-', linewidth=1.5, label='CKF', alpha=0.7)
+        ax.plot(self.comparison_df['Time'], self.comparison_df['SRCF_Error'],
+                'g--', linewidth=1.5, label='SRCF', alpha=0.7)
+
+        ax.set_xlabel('Время (с)', fontsize=11)
+        ax.set_ylabel('Ошибка оценки', fontsize=11)
+        ax.set_title('Динамика ошибок фильтров (Verhaegen & Van Dooren)', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        # 2. Логарифм ошибок
+        ax = axes[0, 1]
+        ckf_log_error = np.log10(np.maximum(self.comparison_df['CKF_Error'], 1e-15))
+        srcf_log_error = np.log10(np.maximum(self.comparison_df['SRCF_Error'], 1e-15))
+
+        ax.plot(self.comparison_df['Time'], ckf_log_error,
+                'b-', linewidth=1.5, label='CKF (log10)', alpha=0.7)
+        ax.plot(self.comparison_df['Time'], srcf_log_error,
+                'g--', linewidth=1.5, label='SRCF (log10)', alpha=0.7)
+
+        ax.set_xlabel('Время (с)', fontsize=11)
+        ax.set_ylabel('log₁₀(Ошибка)', fontsize=11)
+        ax.set_title('Логарифмическая шкала ошибок', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        # 3. Разность ошибок с накоплением
+        ax = axes[1, 0]
+        error_diff = self.comparison_df['SRCF_Error'] - self.comparison_df['CKF_Error']
+        cumulative_diff = error_diff.cumsum()
+
+        ax.plot(self.comparison_df['Time'], error_diff, 'purple', linewidth=1.5,
+                label='Мгновенная разность', alpha=0.7)
+        ax.plot(self.comparison_df['Time'], cumulative_diff, 'orange', linewidth=2,
+                label='Накопленная разность', alpha=0.7)
+
+        ax.axhline(y=0, color='red', linestyle='--', alpha=0.5)
+        ax.fill_between(self.comparison_df['Time'], 0, error_diff,
+                        where=(error_diff > 0), alpha=0.3, color='red', label='CKF лучше')
+        ax.fill_between(self.comparison_df['Time'], 0, error_diff,
+                        where=(error_diff <= 0), alpha=0.3, color='green', label='SRCF лучше')
+
+        ax.set_xlabel('Время (с)', fontsize=11)
+        ax.set_ylabel('Разность ошибок (SRCF - CKF)', fontsize=11)
+        ax.set_title('Накопление разности ошибок', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        # 4. Отношение ошибок во времени
+        ax = axes[1, 1]
+        error_ratio = self.comparison_df['SRCF_Error'] / self.comparison_df['CKF_Error']
+
+        # Скользящее среднее
+        window = min(20, len(error_ratio) // 10)
+        rolling_ratio = error_ratio.rolling(window=window).mean()
+
+        ax.plot(self.comparison_df['Time'], error_ratio, 'gray', linewidth=1, alpha=0.3, label='Мгновенное')
+        ax.plot(self.comparison_df['Time'], rolling_ratio, 'blue', linewidth=2,
+                label=f'{window}-шаговое ср.')
+        ax.axhline(y=1.0, color='red', linestyle='--', linewidth=2, label='Равенство')
+
+        # Среднее значение
+        mean_ratio = error_ratio.mean()
+        ax.axhline(y=mean_ratio, color='orange', linestyle='-', linewidth=2,
+                   label=f'Среднее: {mean_ratio:.3f}')
+
+        ax.set_xlabel('Время (с)', fontsize=11)
+        ax.set_ylabel('Отношение ошибок (SRCF/CKF)', fontsize=11)
+        ax.set_title('Отношение ошибок фильтров во времени', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        plt.suptitle('Анализ численной устойчивости в стиле Verhaegen & Van Dooren',
+                     fontsize=14, fontweight='bold', y=1.02)
+        plt.tight_layout()
+
+        output_path = os.path.join(self.data_path, 'numerical_stability.png')
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f"✓ График 7 (численная устойчивость) сохранен: {output_path}")
+        plt.show()
+
+    def plot_innovation_analysis(self):
+        """График 8: Анализ инноваций"""
+        if self.comparison_df is None or 'Innovation' not in self.comparison_df.columns:
+            print("⚠ Нет данных об инновациях")
+            return
+
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+
+        # 1. Норма инноваций
+        ax = axes[0, 0]
+        ax.plot(self.comparison_df['Time'], self.comparison_df['Innovation'],
+                'b-', linewidth=1.5, alpha=0.7)
+
+        ax.set_xlabel('Время (с)', fontsize=11)
+        ax.set_ylabel('Норма инноваций', fontsize=11)
+        ax.set_title('Эволюция нормы инноваций', fontsize=12, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+
+        # 2. Автокорреляция инноваций
+        ax = axes[0, 1]
+        innovation = self.comparison_df['Innovation'].values
+        n_lags = min(50, len(innovation) // 4)
+
+        if len(innovation) > n_lags * 2:
+            autocorr = np.correlate(innovation - innovation.mean(),
+                                    innovation - innovation.mean(), mode='full')
+            autocorr = autocorr[len(autocorr)//2:len(autocorr)//2 + n_lags]
+            autocorr = autocorr / autocorr[0]
+
+            lags = np.arange(n_lags)
+            ax.stem(lags, autocorr, basefmt=" ", linefmt='b-', markerfmt='bo')
+            ax.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+
+            # Доверительные интервалы для белого шума
+            conf_int = 1.96 / np.sqrt(len(innovation))
+            ax.axhline(y=conf_int, color='red', linestyle='--', alpha=0.5, label='95% доверит.')
+            ax.axhline(y=-conf_int, color='red', linestyle='--', alpha=0.5)
+
+            ax.set_xlabel('Лаг', fontsize=11)
+            ax.set_ylabel('Автокорреляция', fontsize=11)
+            ax.set_title('Автокорреляция инноваций (белый шум?)', fontsize=12, fontweight='bold')
+            ax.legend(loc='best')
+            ax.grid(True, alpha=0.3)
+        else:
+            ax.text(0.5, 0.5, 'Недостаточно данных\nдля автокорреляции',
+                    ha='center', va='center', fontsize=12)
+            ax.set_title('Автокорреляция инноваций', fontsize=12, fontweight='bold')
+
+        # 3. Гистограмма инноваций
+        ax = axes[1, 0]
+        ax.hist(self.comparison_df['Innovation'], bins=30,
+                color='blue', alpha=0.7, edgecolor='black', density=True)
+
+        # Теоретическое нормальное распределение
+        mu = self.comparison_df['Innovation'].mean()
+        sigma = self.comparison_df['Innovation'].std()
+        if sigma > 0:
+            x = np.linspace(self.comparison_df['Innovation'].min(),
+                            self.comparison_df['Innovation'].max(), 100)
+            pdf = stats.norm.pdf(x, mu, sigma)
+            ax.plot(x, pdf, 'r-', linewidth=2, label=f'N(μ={mu:.3f}, σ={sigma:.3f})')
+
+        ax.set_xlabel('Норма инноваций', fontsize=11)
+        ax.set_ylabel('Плотность вероятности', fontsize=11)
+        ax.set_title('Распределение нормы инноваций', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        # 4. Связь инноваций с ошибками
+        ax = axes[1, 1]
+        sc = ax.scatter(self.comparison_df['Innovation'], self.comparison_df['CKF_Error'],
+                        c=self.comparison_df['Time'], cmap='viridis', s=30, alpha=0.7, label='CKF')
+        sc = ax.scatter(self.comparison_df['Innovation'], self.comparison_df['SRCF_Error'],
+                        c=self.comparison_df['Time'], cmap='plasma', s=30, alpha=0.7, label='SRCF')
+
+        ax.set_xlabel('Норма инноваций', fontsize=11)
+        ax.set_ylabel('Ошибка фильтра', fontsize=11)
+        ax.set_title('Связь инноваций с ошибками фильтрации', fontsize=12, fontweight='bold')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        plt.suptitle('Анализ инноваций фильтров Калмана', fontsize=14, fontweight='bold', y=1.02)
+        plt.tight_layout()
+
+        output_path = os.path.join(self.data_path, 'innovation_analysis.png')
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f"✓ График 8 (инновации) сохранен: {output_path}")
+        plt.show()
 
     def print_detailed_analysis(self):
         """Детальный анализ данных"""
@@ -880,10 +1194,10 @@ class KalmanVisualizer:
             max_phi_diff = np.max(np.abs(self.df['ckf_phi'] - self.df['srcf_phi']))
             max_p_diff = np.max(np.abs(self.df['ckf_p'] - self.df['srcf_p']))
 
-            print(f"Максимальное расхождение по φ: {max_phi_diff:.2e}")
-            print(f"Максимальное расхождение по p: {max_p_diff:.2e}")
+            print(f"Максимальное расхождение по φ: {max_phi_diff:.15e}")
+            print(f"Максимальное расхождение по p: {max_p_diff:.15e}")
 
-            are_identical = max_phi_diff < 1e-10 and max_p_diff < 1e-10
+            are_identical = max_phi_diff < 1e-15 and max_p_diff < 1e-15
 
             if are_identical:
                 print("\n✓ CKF и SRCF дают ИДЕНТИЧНЫЕ результаты")
@@ -909,16 +1223,107 @@ class KalmanVisualizer:
         print("="*40)
 
         print(f"Количество шагов: {len(self.df)}")
-        print(f"Временной диапазон: {self.df['time'].min():.2f} - {self.df['time'].max():.2f} с")
-        print(f"Длительность симуляции: {self.df['time'].max() - self.df['time'].min():.2f} с")
+        print(f"Временной диапазон: {self.df['time'].min():.4f} - {self.df['time'].max():.4f} с")
+        print(f"Длительность симуляции: {self.df['time'].max() - self.df['time'].min():.4f} с")
 
         if 'true_phi' in self.df.columns:
-            print(f"\nДиапазон истинного угла φ: {self.df['true_phi'].min():.3f} - {self.df['true_phi'].max():.3f}")
-            print(f"Средний истинный угол φ: {self.df['true_phi'].mean():.3f}")
+            print(f"\nДиапазон истинного угла φ: {self.df['true_phi'].min():.15f} - {self.df['true_phi'].max():.15f}")
+            print(f"Средний истинный угол φ: {self.df['true_phi'].mean():.15f}")
 
         if 'true_p' in self.df.columns:
-            print(f"Диапазон истинной скорости p: {self.df['true_p'].min():.3f} - {self.df['true_p'].max():.3f}")
-            print(f"Средняя истинная скорость p: {self.df['true_p'].mean():.3f}")
+            print(f"Диапазон истинной скорости p: {self.df['true_p'].min():.15f} - {self.df['true_p'].max():.15f}")
+            print(f"Средняя истинная скорость p: {self.df['true_p'].mean():.15f}")
+
+    def generate_comparison_report(self):
+        """Генерация аналитического отчета в стиле Verhaegen & Van Dooren"""
+        if self.comparison_df is None:
+            print("⚠ Нет данных сравнений для аналитического отчета")
+            return
+
+        print("\n" + "="*70)
+        print("АНАЛИТИЧЕСКИЙ ОТЧЕТ В СТИЛЕ VERHAEGEN & VAN DOOREN (1986)")
+        print("="*70)
+
+        # Анализ согласно Theorem 1 из статьи
+        print("\n1. АНАЛИЗ ЧИСЛЕННОЙ УСТОЙЧИВОСТИ (Theorem 1):")
+        print("   " + "-"*50)
+
+        # Ошибки фильтров
+        ckf_avg_error = self.comparison_df['CKF_Error'].mean()
+        srcf_avg_error = self.comparison_df['SRCF_Error'].mean()
+        error_ratio = srcf_avg_error / ckf_avg_error
+
+        print(f"   Средняя ошибка CKF:    {ckf_avg_error:.15e}")
+        print(f"   Средняя ошибка SRCF:   {srcf_avg_error:.15e}")
+        print(f"   Отношение SRCF/CKF:    {error_ratio:.15f}")
+
+        if error_ratio < 1.0:
+            improvement = (1.0 - error_ratio) * 100
+            print(f"   ✅ SRCF лучше на:       {improvement:.15f}%")
+        else:
+            improvement = (error_ratio - 1.0) * 100
+            print(f"   ⚠ CKF лучше на:        {improvement:.15f}%")
+
+        # Нормы ковариаций
+        print("\n2. АНАЛИЗ КОВАРИАЦИОННЫХ МАТРИЦ:")
+        print("   " + "-"*50)
+
+        ckf_cov_norm = self.comparison_df['CKF_Cov_Norm'].mean()
+        srcf_cov_norm = self.comparison_df['SRCF_Cov_Norm'].mean()
+        cov_ratio = srcf_cov_norm / ckf_cov_norm
+
+        print(f"   Средняя норма ковариации CKF:  {ckf_cov_norm:.15e}")
+        print(f"   Средняя норма ковариации SRCF: {srcf_cov_norm:.15e}")
+        print(f"   Отношение норм SRCF/CKF:       {cov_ratio:.15f}")
+
+        # Числа обусловленности
+        if 'CKF_Cond_Number' in self.comparison_df.columns:
+            print("\n3. АНАЛИЗ ЧИСЕЛ ОБУСЛОВЛЕННОСТИ:")
+            print("   " + "-"*50)
+
+            ckf_cond = self.comparison_df['CKF_Cond_Number'].mean()
+            srcf_cond = self.comparison_df['SRCF_Cond_Number'].mean()
+            cond_ratio = srcf_cond / ckf_cond
+
+            print(f"   Среднее cond CKF:    {ckf_cond:.15e}")
+            print(f"   Среднее cond SRCF:   {srcf_cond:.15e}")
+            print(f"   Отношение cond SRCF/CKF: {cond_ratio:.15f}")
+
+            # Интерпретация согласно статье
+            print("\n   ИНТЕРПРЕТАЦИЯ (согласно Verhaegen & Van Dooren):")
+            if cond_ratio < 0.8:
+                print("   ✅ SRCF демонстрирует лучшую численную обусловленность")
+            elif cond_ratio > 1.2:
+                print("   ⚠ CKF демонстрирует лучшую численную обусловленность")
+            else:
+                print("   ↔ Оба фильтра имеют сравнимую численную обусловленность")
+
+        # Рекомендации
+        print("\n4. РЕКОМЕНДАЦИИ:")
+        print("   " + "-"*50)
+
+        recommendations = []
+
+        if error_ratio < 0.95:
+            recommendations.append("✅ Использовать SRCF (лучшая точность)")
+        elif error_ratio > 1.05:
+            recommendations.append("⚠ Использовать CKF (лучшая точкость)")
+        else:
+            recommendations.append("↔ Оба фильтра равноценны по точности")
+
+        if 'CKF_Cond_Number' in self.comparison_df.columns:
+            if ckf_cond > 1e10 or srcf_cond > 1e10:
+                recommendations.append("⚠ Высокая обусловленность - использовать SRCF")
+            elif ckf_cond > 1e8 and cond_ratio < 0.9:
+                recommendations.append("✅ SRCF предпочтительнее при плохой обусловленности")
+
+        if self.comparison_df['CKF_Error'].std() / ckf_avg_error > 1.0:
+            recommendations.append("⚠ Высокая дисперсия ошибок CKF - проверить устойчивость")
+
+        for i, rec in enumerate(recommendations, 1):
+            print(f"   {i}. {rec}")
+
+        print("\n" + "="*70)
 
     def generate_report(self):
         """Генерация полного отчета"""
@@ -961,6 +1366,26 @@ class KalmanVisualizer:
             print("✓ График 5: Сводные метрики")
         except Exception as e:
             print(f"✗ Ошибка в графике 5: {e}")
+
+        if self.comparison_df is not None:
+            try:
+                self.plot_covariance_analysis()
+                print("✓ График 6: Анализ ковариационных матриц")
+            except Exception as e:
+                print(f"✗ Ошибка в графике 6: {e}")
+
+        try:
+            self.plot_numerical_stability()
+            print("✓ График 7: Анализ численной устойчивости")
+        except Exception as e:
+            print(f"✗ Ошибка в графике 7: {e}")
+
+        if 'Innovation' in self.comparison_df.columns:
+            try:
+                self.plot_innovation_analysis()
+                print("✓ График 8: Анализ инноваций")
+            except Exception as e:
+                print(f"✗ Ошибка в графике 8: {e}")
 
         print("\n" + "="*60)
         print("ОТЧЕТ СФОРМИРОВАН")
@@ -1009,6 +1434,7 @@ if __name__ == "__main__":
     # Создаем визуализатор и генерируем отчет
     visualizer = KalmanVisualizer(data_path)
     visualizer.generate_report()
+    visualizer.generate_comparison_report()
 
     # Дополнительная информация
     print("\n" + "="*60)

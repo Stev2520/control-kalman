@@ -306,7 +306,7 @@ void SRCF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     std::cout << "\n--- Extracting Postarray Blocks ---" << std::endl;
 
     // Извлечение постаррея (транспонирование R)
-    Eigen::MatrixXd postarray = -R_mat.topLeftCorner(nx + ny, nx + ny).transpose();
+    Eigen::MatrixXd postarray = -R_mat.topLeftCorner(ny + nx, ny + nx).transpose();
     std::cout << "\nPostarray (" << postarray.rows() << "x" << postarray.cols() << "):\n" << postarray << "\n";
 
     if (!postarray.allFinite()) {
