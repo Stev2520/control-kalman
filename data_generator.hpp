@@ -87,6 +87,8 @@ namespace data_generator {
      */
     struct SimulationData {
         std::vector<double> times;                             /**< Временные метки */
+        std::vector<double> ckf_step_times;                    /**< Время шага CKF */
+        std::vector<double> srcf_step_times;                   /**< Время шага SRCF */
         std::vector<Eigen::Vector2d> true_states;              /**< Истинные состояния */
         std::vector<Eigen::Vector2d> measurements;             /**< Точные измерения */
         std::vector<Eigen::Vector2d> noisy_measurements;       /**< Зашумленные измерения */
@@ -379,18 +381,35 @@ namespace data_generator {
 
                 // Шаги фильтров
                 if (config_.test_ckf) {
+                    auto start_ckf = std::chrono::high_resolution_clock::now();
                     ckf.step(A, B, C, D, Q, R, u, y_noisy);
+                    auto end_ckf = std::chrono::high_resolution_clock::now();
                     data.ckf_estimates.emplace_back(ckf.state());
                     data.ckf_covariances.emplace_back(ckf.covariance());
+                    auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_ckf - start_ckf);
+                    double time_ns = static_cast<double>(duration_ns.count());
+                    std::chrono::duration<double> duration_sec = end_ckf - start_ckf;
+                    double time_sec = duration_sec.count();
+                    data.ckf_step_times.push_back(duration_ns.count());
+                    std::cout << "Время CKF (сек): " << time_sec << std::endl;
+                    std::cout << "Время CKF (нс): " << time_ns << std::endl;
                 }
-
+                auto start_srcf = std::chrono::high_resolution_clock::now();
                 srcf.step(A, B, C, D, Q, R, u, y_noisy);
+                auto end_srcf = std::chrono::high_resolution_clock::now();
+                auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_srcf - start_srcf);
+                double time_ns = static_cast<double>(duration_ns.count());
+                std::chrono::duration<double> duration_sec = end_srcf - start_srcf;
+                double time_sec = duration_sec.count();
+                data.srcf_step_times.push_back(duration_ns.count());
                 data.srcf_estimates.emplace_back(srcf.state());
                 data.srcf_covariances.emplace_back(srcf.covariance());
                 data.true_states.push_back(x_true);
                 data.measurements.push_back(y_exact);
                 data.noisy_measurements.push_back(y_noisy);
                 data.controls.push_back(u);
+                std::cout << "Время SRCF (сек): " << time_sec << std::endl;
+                std::cout << "Время SRCF (нс): " << time_ns << std::endl;
             }
             log("[MODEL0] Generation completed: " +
                 std::to_string(data.true_states.size()) + " steps");
@@ -464,18 +483,35 @@ namespace data_generator {
 
                 // Шаги фильтров
                 if (config_.test_ckf) {
+                    auto start_ckf = std::chrono::high_resolution_clock::now();
                     ckf.step(A, B, C, D, Q, R, u, y_noisy);
+                    auto end_ckf = std::chrono::high_resolution_clock::now();
                     data.ckf_estimates.emplace_back(ckf.state());
                     data.ckf_covariances.emplace_back(ckf.covariance());
+                    auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_ckf - start_ckf);
+                    double time_ns = static_cast<double>(duration_ns.count());
+                    std::chrono::duration<double> duration_sec = end_ckf - start_ckf;
+                    double time_sec = duration_sec.count();
+                    data.ckf_step_times.push_back(duration_ns.count());
+                    std::cout << "Время CKF (сек): " << time_sec << std::endl;
+                    std::cout << "Время CKF (нс): " << time_ns << std::endl;
                 }
-
+                auto start_srcf = std::chrono::high_resolution_clock::now();
                 srcf.step(A, B, C, D, Q, R, u, y_noisy);
+                auto end_srcf = std::chrono::high_resolution_clock::now();
+                auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_srcf - start_srcf);
+                double time_ns = static_cast<double>(duration_ns.count());
+                std::chrono::duration<double> duration_sec = end_srcf - start_srcf;
+                double time_sec = duration_sec.count();
+                data.srcf_step_times.push_back(duration_ns.count());
                 data.srcf_estimates.emplace_back(srcf.state());
                 data.srcf_covariances.emplace_back(srcf.covariance());
                 data.true_states.push_back(x_true);
                 data.measurements.push_back(y_exact);
                 data.noisy_measurements.push_back(y_noisy);
                 data.controls.push_back(u);
+                std::cout << "Время SRCF (сек): " << time_sec << std::endl;
+                std::cout << "Время SRCF (нс): " << time_ns << std::endl;
             }
             log("[MODEL2] Generation completed: " +
                 std::to_string(data.true_states.size()) + " steps");
