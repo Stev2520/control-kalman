@@ -7,7 +7,7 @@ import os
 from matplotlib.patches import Ellipse
 
 class KalmanVisualizer:
-    def __init__(self, data_path='./cmake-build-debug/data/unstable_test'):
+    def __init__(self, data_path='./cmake-build-debug/data/verhaegen_test6_easy'):
         self.data_path = data_path
         self.df = None
         self.times = None
@@ -26,9 +26,9 @@ class KalmanVisualizer:
 
             # Ищем папки с данными
             possible_paths = [
-                './data/unstable_test',
-                '../data/unstable_test',
-                '../../data/unstable_test',
+                './data/verhaegen_test6_easy',
+                '../data/verhaegen_test6_easy',
+                '../../data/verhaegen_test6_easy',
                 f'../{self.data_path}',
                 f'../../{self.data_path}'
             ]
@@ -502,6 +502,60 @@ class KalmanVisualizer:
         print(f"✓ График 1 сохранен: {output_path}")
         plt.show()
 
+    def plot_kalman_x_like_photo(self, filter_name='ckf'):
+        """
+        Строит график в точности как на фото:
+        - Чёрная: истинное значение угла
+        - Красные точки: зашумлённые измерения (акселерометр → угол)
+        - Зелёная линия: оценка одного фильтра (CKF или SRCF)
+        """
+        if self.df is None:
+            print("⚠ Нет данных")
+            return
+
+        # Выбор фильтра
+        if filter_name == 'ckf':
+            est_phi = self.df['ckf_phi']
+            label = 'Результаты фильтра'
+        elif filter_name == 'srcf':
+            est_phi = self.df['srcf_phi']
+            label = 'Результаты фильтра (SRCF)'
+        else:
+            raise ValueError("filter_name must be 'ckf' or 'srcf'")
+
+        mse = np.mean((est_phi - self.df['true_phi'])**2)
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # 1. Истина — чёрная сплошная
+        ax.plot(self.df['time'], self.df['true_phi'], 'k-', linewidth=2, label='Истинная траектория')
+
+        # 2. Зашумлённые измерения — красные точки
+        if 'meas_accel_noisy' in self.df.columns:
+            g = 9.80665
+            with np.errstate(invalid='ignore', divide='ignore'):
+                meas_phi_noisy = np.arcsin(self.df['meas_accel_noisy'] / g)
+            # Фильтруем некорректные значения (|accel/g| > 1)
+            valid = np.abs(self.df['meas_accel_noisy'] / g) <= 20
+            ax.plot(self.df['time'][valid], meas_phi_noisy[valid], 'r.', markersize=3, alpha=0.6, label='Измерения')
+
+        # 3. Оценка фильтра — зелёная линия
+        ax.plot(self.df['time'], est_phi, 'g-', linewidth=2, label=label)
+
+        # Оформление
+        ax.set_xlabel('Шаг времени', fontsize=12)
+        ax.set_ylabel('Положение', fontsize=12)
+        ax.set_title(f'Сравнение измерений, истинной траектории и результатов фильтра Калмана\n'
+                     f'MSE для положения: {mse:.6f} | Количество шагов: {len(self.df)}', fontsize=13)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # Сохранение
+        output_path = os.path.join(self.data_path, f'kalman_x_like_photo_{filter_name}.png')
+        plt.savefig(output_path, dpi=200, bbox_inches='tight')
+        print(f"✓ Сохранён график как на фото: {output_path}")
+        plt.show()
+
     def plot_error_analysis(self):
         """График 2: Детальный анализ ошибок"""
         if self.df is None:
@@ -890,13 +944,13 @@ class KalmanVisualizer:
             print(f"  CKF:  {ckf_val:.15e}")
             print(f"  SRCF: {srcf_val:.15e}")
 
-            if not np.isclose(ratio, 1.0, atol=1e-15):
-                better = "SRCF" if ratio < 1 else "CKF"
-                improvement = abs(1 - ratio) * 100
-                print(f"  Отношение (SRCF/CKF): {ratio:.15f}")
-                print(f"  {better} лучше на {improvement:.3f}%")
-            else:
-                print(f"  Отношение (SRCF/CKF): 1.000000 (идентичны)")
+            # if not np.isclose(ratio, 1.0, atol=1e-17):
+            better = "SRCF" if ratio < 1 else "CKF"
+            improvement = abs(1 - ratio) * 100
+            print(f"  Отношение (SRCF/CKF): {ratio:.15f}")
+            print(f"  {better} лучше на {improvement:.15f}%")
+            # else:
+            #     print(f"  Отношение (SRCF/CKF): 1.000000 (идентичны)")
 
         if additional_metrics:
             print(f"\nМетрики измерений:")
@@ -1410,12 +1464,12 @@ if __name__ == "__main__":
     else:
         # Пробуем разные возможные пути
         possible_paths = [
-            './cmake-build-debug/data/unstable_test',
-            './data/unstable_test',
-            '../cmake-build-debug/data/unstable_test',
-            '../data/unstable_test',
-            '../../data/unstable_test',
-            'data/unstable_test'
+            './cmake-build-debug/data/verhaegen_test6_easy',
+            './data/verhaegen_test6_easy',
+            '../cmake-build-debug/data/verhaegen_test6_easy',
+            '../data/verhaegen_test6_easy',
+            '../../data/verhaegen_test6_easy',
+            'data/verhaegen_test6_easy'
         ]
 
         data_path = None
@@ -1426,7 +1480,7 @@ if __name__ == "__main__":
                 break
 
         if data_path is None:
-            data_path = './data/unstable_test'
+            data_path = './data/verhaegen_test6_easy'
             print(f"⚠ Путь не найден, используем по умолчанию: {data_path}")
             print("  Для указания другого пути запустите:")
             print(f"    python {sys.argv[0]} /ваш/путь/к/данным")
@@ -1450,3 +1504,5 @@ if __name__ == "__main__":
     print("   - meas_gyro_exact/noisy: измерения гироскопа (угловая скорость p)")
     print("   - meas_accel_exact/noisy: измерения акселерометра (g·sin(φ))")
     print("4. Все графики показывают оба фильтра, даже если они идентичны")
+
+    visualizer.plot_kalman_x_like_photo(filter_name='ckf')  # или 'srcf'

@@ -94,7 +94,7 @@ CKF::CKF(Eigen::VectorXd x0, Eigen::MatrixXd P0)
     if (asymmetry > 1e-10) {
         std::cerr << "WARNING: CKF: P0 is not symmetric (asymmetry = "
                   << asymmetry << "), symmetrizing" << std::endl;
-        P_ = 0.5 * (P_ + P_.transpose());
+//        P_ = 0.5 * (P_ + P_.transpose());
     }
 
     // Проверка положительной определенности
@@ -141,7 +141,7 @@ void CKF::initialize(const Eigen::VectorXd &x0,
     P_ = P0;
 
     // Гарантируем симметричность
-    P_ = 0.5 * (P_ + P_.transpose());
+//    P_ = 0.5 * (P_ + P_.transpose());
 
     std::cout << "CKF reinitialized" << std::endl;
 }
@@ -327,7 +327,8 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
     // ============================================
 
     // Симметризация
-    P_ = 0.5 * (P_next + P_next.transpose());
+//    P_ = 0.5 * (P_next + P_next.transpose());
+    P_ = P_next;
     std::cout << "After symmetrization:\n" << P_ << "\n";
 
     // Проверка положительной определенности

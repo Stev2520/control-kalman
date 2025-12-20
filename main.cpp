@@ -601,26 +601,42 @@ void test_model_comparison()
  */
 void test_basic()
 {
-    std::cout << "\n=== TEST 8: WITH PROCESS AND MEASUREMENT NOISE ===\n";
+    std::cout << "\n" << std::string(70, '=') << "\n";
+    std::cout << "TEST 6: ЭКСТРЕМАЛЬНЫЕ УСЛОВИЯ (Verhaegen Test 6)\n";
+    std::cout << "Условия: Все параметры на границе устойчивости\n";
+    std::cout << "Ожидается: CKF должен сломаться, SRCF выжить\n";
+    std::cout << std::string(70, '=') << "\n";
+
     data_generator::SimulationConfig config;
-    config.total_steps = 100;  // Увеличим для статистики
-    config.base_dt = 0.02;
+    config.total_steps = 1500; // 100 секунд
+    config.base_dt = 0.01;
+
     config.add_process_noise = true;
     config.add_measurement_noise = true;
-    config.process_noise_scale = 1.0;      // Стандартный масштаб
-    config.measurement_noise_scale = 1.0;  // Стандартный масштаб
+
+    // Экстремальные значения
+    config.process_noise_scale = 1.0;    // Очень высокий шум
+    config.measurement_noise_scale = 1.0; // Сверхточные измерения
+
     config.model_type = data_generator::ModelType::MODEL2;
-    config.scenario.scenario2 = model2::ControlScenario::SINE_WAVE;
+    config.scenario.scenario2 = model2::ControlScenario::SINE_UPDATE_WAVE;
     config.time_mode = time_generator::TimeMode::UNIFORM;
-    config.format = data_generator::DataFormat::TEXT_TXT;
-    config.output_dir = "./data/test_with_noise";
+    config.format = data_generator::DataFormat::TEXT_CSV;
     config.test_ckf = true;
     config.use_custom_initial = true;
-    config.initial_state << 1, 2;
-    config.initial_covariance << 0.01, 0.0,
-            0.0, 0.01;
-    config.seed = 77777;
-    run_test("Test with Noise", config, config.seed);
+
+    // Экстремальные начальные условия
+    config.initial_state << 0.0, 0.0;  // Очень далеко от рабочей точки
+
+    // Чрезвычайно плохо обусловленная P0
+    config.initial_covariance << 1e6, 0,
+            0,   1e6;
+
+    config.output_dir = "./data/verhaegen_test6_easy";
+    config.seed = 66666;
+
+
+    run_test("Экстремальные условия", config, config.seed);
 
 //    std::cout << "\n=== TEST 11: PROCESS NOISE ONLY ===\n";
 //
@@ -653,14 +669,14 @@ void test_performance() {
             std::chrono::high_resolution_clock::now();
 
     data_generator::SimulationConfig config;
-    config.total_steps = 5000;  // Большое количество шагов для теста производительности
+    config.total_steps = 5000;
     config.base_dt = 0.01;
     config.add_process_noise = true;
     config.add_measurement_noise = true;
     config.model_type = data_generator::ModelType::MODEL2;
     config.scenario.scenario2 = model2::ControlScenario::STEP_MANEUVER;
     config.time_mode = time_generator::TimeMode::UNIFORM;
-    config.format = data_generator::DataFormat::TEXT_CSV;  // Самый быстрый формат
+    config.format = data_generator::DataFormat::TEXT_CSV;
     config.use_custom_initial = false;
     config.output_dir = "./data/performance_test";
     config.test_ckf = true;

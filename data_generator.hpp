@@ -1229,6 +1229,7 @@ namespace data_generator {
                     case model2::ControlScenario::ZERO_HOLD: file << "ZERO_HOLD"; break;
                     case model2::ControlScenario::STEP_MANEUVER: file << "STEP_MANEUVER"; break;
                     case model2::ControlScenario::SINE_WAVE: file << "SINE_WAVE"; break;
+                    case model2::ControlScenario::SINE_UPDATE_WAVE: file << "SINE_UPDATE_WAVE"; break;
                     case model2::ControlScenario::PULSE: file << "PULSE"; break;
                 }
             }

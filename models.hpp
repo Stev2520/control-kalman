@@ -510,9 +510,12 @@ namespace model0
 namespace model2
 {
     // Параметры системы
-    const double L_phi = 2.5;       /**< 1/с² (восстанавливающий момент) */
-    const double L_p = 1.0;         /**< 1/с (демпфирование) */
-    const double L_delta = 15.0;    /**< 1/с² (эффективность элеронов) */
+//    const double L_phi = 2.5;       /**< 1/с² (восстанавливающий момент) */
+//    const double L_p = 1.0;         /**< 1/с (демпфирование) */
+//    const double L_delta = 15.0;    /**< 1/с² (эффективность элеронов) */
+    const double L_phi = 0.05;       /**< 1/с² (восстанавливающий момент) */
+    const double L_p = 1.05;         /**< 1/с (демпфирование) */
+    const double L_delta = 8.0;    /**< 1/с² (эффективность элеронов) */
     const double g = 9.80665;       /**< м/с² (ускорение свободного падения) */
     const double sigma_w = 0.02;    /**< рад/с² (интенсивность шума процесса) */
     const double sigma_g = 0.01;    /**< рад/с (шум гироскопа) */
@@ -526,6 +529,7 @@ namespace model2
         ZERO_HOLD,      /**< u=0 (автопилот, стабилизация) */
         STEP_MANEUVER,  /**< Ступенчатое управление */
         SINE_WAVE,      /**< Синусоидальное управление */
+        SINE_UPDATE_WAVE,      /**< Синусоидальное управление */
         PULSE           /**< Импульсное управление */
     };
 
@@ -583,8 +587,9 @@ namespace model2
     {
         auto& state = get_noise_state();
         double xi = state.distribution(state.generator);
-        state.last_w = state.alpha * state.last_w +
-                       sigma_w * std::sqrt(1.0 - state.alpha * state.alpha) * xi;
+//        state.last_w = state.alpha * state.last_w +
+//                       sigma_w * std::sqrt(1.0 - state.alpha * state.alpha) * xi;
+        state.last_w = xi;
         return state.last_w;
     }
 
@@ -604,13 +609,20 @@ namespace model2
     Eigen::MatrixXd Phi(double dt)
     {
         Eigen::Matrix2d phi;
-        double exp_term = exp(-0.5 * dt);
-        double sin_term = sin(1.5 * dt);
-        double cos_term = cos(1.5 * dt);
-        phi(0,0) = exp_term * (sin_term / 3.0 + cos_term);
-        phi(0,1) = exp_term * (2.0 * sin_term / 3.0);
-        phi(1,0) = exp_term * (-5.0 * sin_term / 3.0);
-        phi(1,1) = exp_term * (-sin_term / 3.0 + cos_term);
+        double coeff = 20.0/19.0;
+        double exp_1_term = exp(-0.05 * dt);
+        double exp_2_term = exp(-1.0 * dt);
+//        double exp_term = exp(-0.5 * dt);
+//        double sin_term = sin(1.5 * dt);
+//        double cos_term = cos(1.5 * dt);
+//        phi(0,0) = exp_term * (sin_term / 3.0 + cos_term);
+//        phi(0,1) = exp_term * (2.0 * sin_term / 3.0);
+//        phi(1,0) = exp_term * (-5.0 * sin_term / 3.0);
+//        phi(1,1) = exp_term * (-sin_term / 3.0 + cos_term);
+        phi(0,0) = coeff * (exp_1_term - 0.05 * exp_2_term);
+        phi(0,1) = coeff * (-0.05 * exp_1_term + 0.05 * exp_2_term);
+        phi(1,0) = coeff * (exp_1_term - exp_2_term);
+        phi(1,1) = coeff * (-0.05 * exp_1_term + exp_2_term);
         return phi;
     }
 
@@ -622,11 +634,18 @@ namespace model2
     Eigen::Vector2d Psi(double dt)
     {
         Eigen::Vector2d psi;
-        double exp_term = exp(-0.5 * dt);
-        double sin_term = sin(1.5 * dt);
-        double cos_term = cos(1.5 * dt);
-        psi(0) = -2 * sin_term * exp_term - 6 * cos_term * exp_term + 6;
-        psi(1) = 10 * sin_term * exp_term;
+        double coeff_1 = 3200.0/19.0;
+        double coeff_2 = 160.0/19.0;
+        double coeff_3 = 160.0;
+        double exp_1_term = exp(-0.05 * dt);
+        double exp_2_term = exp(-1.0 * dt);
+//        double exp_term = exp(-0.5 * dt);
+//        double sin_term = sin(1.5 * dt);
+//        double cos_term = cos(1.5 * dt);
+//        psi(0) = -2 * sin_term * exp_term - 6 * cos_term * exp_term + 6;
+//        psi(1) = 10 * sin_term * exp_term;
+        psi(0) = -coeff_1 * exp_1_term + coeff_2 * exp_2_term + coeff_3;
+        psi(1) = coeff_2 * exp_1_term - coeff_2 * exp_2_term;
         return psi;
     }
 
@@ -638,11 +657,18 @@ namespace model2
     Eigen::Vector2d Gamma(double dt)
     {
         Eigen::Vector2d gamma;
-        double exp_term = exp(-0.5 * dt);
-        double sin_term = sin(1.5 * dt);
-        double cos_term = cos(1.5 * dt);
-        gamma(0) = -2.0 / 15.0 * sin_term * exp_term - 2.0 / 5.0 * cos_term * exp_term + 2.0 / 5.0;
-        gamma(1) = 2.0 / 3.0 * sin_term * exp_term;
+        double coeff_1 = 400.0/19.0;
+        double coeff_2 = 20.0/19.0;
+        double coeff_3 = 20.0;
+        double exp_1_term = exp(-0.05 * dt);
+        double exp_2_term = exp(-1.0 * dt);
+//        double exp_term = exp(-0.5 * dt);
+//        double sin_term = sin(1.5 * dt);
+//        double cos_term = cos(1.5 * dt);
+//        gamma(0) = -2.0 / 15.0 * sin_term * exp_term - 2.0 / 5.0 * cos_term * exp_term + 2.0 / 5.0;
+//        gamma(1) = 2.0 / 3.0 * sin_term * exp_term;
+        gamma(0) = -coeff_1 * exp_1_term + coeff_2 * exp_2_term + coeff_3;
+        gamma(1) = coeff_2 * exp_1_term - coeff_2 * exp_2_term;
         return gamma;
     }
 
@@ -763,16 +789,18 @@ namespace model2
     Eigen::MatrixXd R(double t = 0.0)
     {
         Eigen::Matrix2d R_mat;
-        double rg = sigma_g * sigma_g;  // дисперсия гироскопа
-        double ra = sigma_a * sigma_a;  // дисперсия акселерометра
-        R_mat << rg, 0.0,
-                0.0, ra;
+//        double rg = sigma_g * sigma_g;  // дисперсия гироскопа
+//        double ra = sigma_a * sigma_a;  // дисперсия акселерометра
+//        R_mat << rg, 0.0,
+//                0.0, ra;
 
         // Гарантируем положительную определенность
-        if (R_mat.determinant() < 1e-12) {
-            std::cout << "[MODEL2] WARNING: R is near-singular, adding stabilization\n";
-            R_mat += Eigen::Matrix2d::Identity() * 1e-6;
-        }
+//        if (R_mat.determinant() < 1e-18) {
+//            std::cout << "[MODEL2] WARNING: R is near-singular, adding stabilization\n";
+//            R_mat += Eigen::Matrix2d::Identity() * 1e-6;
+//        }
+        R_mat << 1e-20, 0.0,
+                0.0,   1e-20;
 
         return R_mat;
     }
@@ -812,6 +840,24 @@ namespace model2
     // ------------------------------------------------------------------------
     // СИГНАЛЫ
     // ------------------------------------------------------------------------
+    /**
+     * @brief Шум процесса
+     * @param t Время (не используется)
+     * @param dt Шаг времени (не используется)
+     * @param noise Флаг добавления шума
+     * @return Eigen::Vector2d Вектор шума процесса размером 2
+     */
+    Eigen::VectorXd w(double t, double dt, bool noise = false)
+    {
+        if (!noise) {
+            return Eigen::VectorXd::Zero(2);
+        }
+        // w(0) = 0, w(1) = коррелированный шум
+        Eigen::Vector2d w_vec;
+        w_vec << 0.0, generate_correlated_noise();
+        return w_vec;
+    }
+
 
     /**
     * @brief Входное управление (отклонение элеронов)
@@ -843,31 +889,17 @@ namespace model2
                 u_vec << 0.05 * sin(0.5 * t);
                 break;
 
+            case ControlScenario::SINE_UPDATE_WAVE:
+                // Синусоидальное управление
+                u_vec << 4 * sin(static_cast<double>(2 * M_PI * t + 1.0));
+                break;
+
             case ControlScenario::PULSE:
                 // Импульс на 3 секунде
                 u_vec << 0.2 * exp(-(t - 3.0) * (t - 3.0) / 0.5);
                 break;
         }
-
         return u_vec;
-    }
-
-    /**
-     * @brief Шум процесса
-     * @param t Время (не используется)
-     * @param dt Шаг времени (не используется)
-     * @param noise Флаг добавления шума
-     * @return Eigen::Vector2d Вектор шума процесса размером 2
-     */
-    Eigen::VectorXd w(double t, double dt, bool noise = false)
-    {
-        if (!noise) {
-            return Eigen::VectorXd::Zero(2);
-        }
-        // w(0) = 0, w(1) = коррелированный шум
-        Eigen::Vector2d w_vec;
-        w_vec << 0.0, generate_correlated_noise();
-        return w_vec;
     }
 
     /**
