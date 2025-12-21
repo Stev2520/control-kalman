@@ -413,6 +413,22 @@ namespace data_generator {
             }
             log("[MODEL0] Generation completed: " +
                 std::to_string(data.true_states.size()) + " steps");
+            double ckf_time_count = 0.0;
+            double srcf_time_count = 0.0;
+            std::cerr << "Время CKF (steps): " << std::endl;
+            for (double ckf_step_time : data.ckf_step_times) {
+                std::cout << ckf_step_time << " ";
+                ckf_time_count += ckf_step_time;
+            }
+            std::cout << std::endl;
+            std::cerr << "Сумма времен CKF: " << ckf_time_count << std::endl;
+            std::cerr << "Время SRCF (steps): " << std::endl;
+            for (double srcf_step_time : data.srcf_step_times) {
+                std::cout << srcf_step_time << " ";
+                srcf_time_count += srcf_step_time;
+            }
+            std::cout << std::endl;
+            std::cerr << "Сумма времен SCRF: " << srcf_time_count << std::endl;
         }
 
         /**
@@ -515,6 +531,22 @@ namespace data_generator {
             }
             log("[MODEL2] Generation completed: " +
                 std::to_string(data.true_states.size()) + " steps");
+            double ckf_time_count = 0.0;
+            double srcf_time_count = 0.0;
+            std::cerr << "Время CKF (steps): " << std::endl;
+            for (double ckf_step_time : data.ckf_step_times) {
+                std::cout << ckf_step_time << " ";
+                ckf_time_count += ckf_step_time;
+            }
+            std::cout << std::endl;
+            std::cerr << "Сумма времен CKF: " << ckf_time_count << std::endl;
+            std::cerr << "Время SRCF (steps): " << std::endl;
+            for (double srcf_step_time : data.srcf_step_times) {
+                std::cout << srcf_step_time << " ";
+                srcf_time_count += srcf_step_time;
+            }
+            std::cout << std::endl;
+            std::cerr << "Сумма времен SCRF: " << srcf_time_count << std::endl;
         }
 
         /**

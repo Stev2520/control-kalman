@@ -333,17 +333,17 @@ void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B,
 
     // Проверка положительной определенности
     Eigen::LLT<Eigen::MatrixXd> llt_final(P_);
-    if (llt_final.info() != Eigen::Success) {
-        std::cerr << "WARNING: Final covariance is not positive definite, regularizing"
-                  << std::endl;
-        P_.diagonal().array() += 1e-8;
-        llt_final.compute(P_);
-        if (llt_final.info() != Eigen::Success) {
-            // Крайний случай: сбрасываем к диагональной матрице
-            std::cerr << "ERROR: Cannot regularize P, resetting to diagonal" << std::endl;
-            P_ = Eigen::MatrixXd::Identity(nx, nx) * P_old.norm();
-        }
-    }
+//    if (llt_final.info() != Eigen::Success) {
+//        std::cerr << "WARNING: Final covariance is not positive definite, regularizing"
+//                  << std::endl;
+//        P_.diagonal().array() += 1e-8;
+//        llt_final.compute(P_);
+//        if (llt_final.info() != Eigen::Success) {
+//            // Крайний случай: сбрасываем к диагональной матрице
+//            std::cerr << "ERROR: Cannot regularize P, resetting to diagonal" << std::endl;
+//            P_ = Eigen::MatrixXd::Identity(nx, nx) * P_old.norm();
+//        }
+//    }
 
     std::cout << "Final covariance (after symmetrization):"
               << std::endl << P_ << std::endl;

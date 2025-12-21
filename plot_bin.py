@@ -1505,4 +1505,4 @@ if __name__ == "__main__":
     print("   - meas_accel_exact/noisy: измерения акселерометра (g·sin(φ))")
     print("4. Все графики показывают оба фильтра, даже если они идентичны")
 
-    visualizer.plot_kalman_x_like_photo(filter_name='ckf')  # или 'srcf'
+    visualizer.plot_kalman_x_like_photo(filter_name='srcf')  # или 'srcf'
