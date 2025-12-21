@@ -57,17 +57,17 @@ int main()
                 start = std::chrono::high_resolution_clock::now();
                 ckf.step(A, B, C, D, Q, R, u, y);
                 end = std::chrono::high_resolution_clock::now();
-                timeCKF = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+                timeCKF += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
                 start = std::chrono::high_resolution_clock::now();
                 srcf.step(A, B, C, D, Q, R, u, y);
                 end = std::chrono::high_resolution_clock::now();
+                timeSRCF += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
                 auto error = ckf.state() - x_exact;
                 lossCKF += error.squaredNorm();
                 error = srcf.state() - x_exact;
                 lossSRCF += error.squaredNorm();
                 filteredCKF.write((char*)ckf.state().data(), sizeof(double) * ckf.state().size());
                 filteredSRCF.write((char*)srcf.state().data(), sizeof(double) * srcf.state().size());
-                t_prev = t;
             }
             metricsCKF << std::fixed << std::setprecision(15) << std::sqrt(lossCKF / (n << 1)) << "\t";
             timingsCKF << timeCKF << "\t";
