@@ -1,4 +1,5 @@
 #include "kalman.hpp"
+#include <iostream>
 using namespace kalman;
 CKF::CKF(const size_t nx) : x_(Eigen::VectorXd::Zero(nx)), P_(Eigen::MatrixXd::Identity(nx, nx)) { }
 CKF::CKF(const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0) : x_(x0), P_(P0) { }
@@ -9,7 +10,19 @@ void CKF::initialize(const Eigen::VectorXd &x0, const Eigen::MatrixXd &P0)
 }
 void CKF::step(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, const Eigen::MatrixXd &C, const Eigen::MatrixXd &D, const Eigen::MatrixXd &Q, const Eigen::MatrixXd &R, const Eigen::VectorXd &u, const Eigen::VectorXd &y)
 {
+    static bool firstRun = true;
     const size_t nx = x_.size(), ny = y.size(), nw = B.cols(), nu = u.size();
+    if (firstRun)
+    {
+        std::cout << "nx: " << nx << ", ny: " << ny << ", nw: " << nw << ", nu: " << nu << std::endl;
+        std::cout << A.rows() << ' ' << A.cols() << '\n'
+                  << B.rows() << ' ' << B.cols() << '\n'
+                  << C.rows() << ' ' << C.cols() << '\n'
+                  << D.rows() << ' ' << D.cols() << '\n'
+                  << Q.rows() << ' ' << Q.cols() << '\n'
+                  << R.rows() << ' ' << R.cols() << std::endl;
+        firstRun = false;
+    }
     assert(
         A.rows() == nx && A.cols() == nx &&
         B.rows() == nx && B.cols() == nw &&

@@ -1,5 +1,6 @@
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <string>
 #include <chrono>
 #include "kalman.hpp"
@@ -20,7 +21,7 @@ int main()
                   timingsCKF("timingsCKF.txt"),
                   timingsSRCF("timingsSRCF.txt");
     //times.read((char*)&n, sizeof(size_t));
-    double t_prev = t0, t, dt;
+    double t_prev, t;
     Eigen::VectorXd x_exact = Eigen::Vector2d::Zero(), y_exact(2);
     Eigen::MatrixXd A, B, C, D, Q, R;
     Eigen::VectorXd u, w, v, y;
@@ -62,10 +63,10 @@ int main()
                 srcf.step(A, B, C, D, Q, R, u, y);
                 end = std::chrono::high_resolution_clock::now();
                 timeSRCF += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-                auto error = ckf.state() - x_exact;
-                lossCKF += error.squaredNorm();
-                error = srcf.state() - x_exact;
-                lossSRCF += error.squaredNorm();
+                auto errorCKF = ckf.state() - x_exact;
+                lossCKF += errorCKF.squaredNorm();
+                auto errorSRCF = srcf.state() - x_exact;
+                lossSRCF += errorSRCF.squaredNorm();
                 filteredCKF.write((char*)ckf.state().data(), sizeof(double) * ckf.state().size());
                 filteredSRCF.write((char*)srcf.state().data(), sizeof(double) * srcf.state().size());
             }
