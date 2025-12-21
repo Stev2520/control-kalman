@@ -807,18 +807,18 @@ namespace model2
     Eigen::MatrixXd R(double t = 0.0)
     {
         Eigen::Matrix2d R_mat;
-//        double rg = sigma_g * sigma_g;  // дисперсия гироскопа
-//        double ra = sigma_a * sigma_a;  // дисперсия акселерометра
-//        R_mat << rg, 0.0,
-//                0.0, ra;
+        double rg = sigma_g * sigma_g;  // дисперсия гироскопа
+        double ra = sigma_a * sigma_a;  // дисперсия акселерометра
+        R_mat << rg, 0.0,
+                0.0, ra;
 
         // Гарантируем положительную определенность
 //        if (R_mat.determinant() < 1e-18) {
 //            std::cout << "[MODEL2] WARNING: R is near-singular, adding stabilization\n";
 //            R_mat += Eigen::Matrix2d::Identity() * 1e-6;
 //        }
-        R_mat << 1e-20, 0.0,
-                0.0,   1e-20;
+//        R_mat << 1e-20, 0.0,
+//                0.0,   1e-20;
 
         return R_mat;
     }
