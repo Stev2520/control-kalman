@@ -98,23 +98,23 @@ namespace model0
 namespace model1    //aeroplane from practice
 {
     const double b = 1;
-    Eigen::MatrixXd Q(double t = 0.0) 
+    Eigen::MatrixXd Q(double t = 0)
     {
         static const Eigen::MatrixXd Q_const = []() {
             Eigen::MatrixXd q(2, 2);
-            q << 0.05, 0.01,   // Angle and angular velocity process noise
-                 0.01, 0.1;    // (with some correlation)
+            q << 1e-6, 0,   // Angle and angular velocity process noise
+                 0, 4e-4;    // (with some correlation)
             return q;
         }();
         return Q_const;
     }
     
-    Eigen::MatrixXd R(double t = 0.0) 
+    Eigen::MatrixXd R(double t = 0)
     {
         static const Eigen::MatrixXd R_const = []() {
             Eigen::MatrixXd r(2, 2);
-            r << 0.5, 0.0,
-                 0.0, 0.5;
+            r << 1.2e-5, 0,
+                 0, 7.6e-7;
             return r;
         }();
         return R_const;
