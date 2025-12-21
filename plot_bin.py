@@ -536,7 +536,7 @@ class KalmanVisualizer:
             with np.errstate(invalid='ignore', divide='ignore'):
                 meas_phi_noisy = np.arcsin(self.df['meas_accel_noisy'] / g)
             # Фильтруем некорректные значения (|accel/g| > 1)
-            valid = np.abs(self.df['meas_accel_noisy'] / g) <= 20
+            valid = np.abs(self.df['meas_accel_noisy'] / g) <= 500
             ax.plot(self.df['time'][valid], meas_phi_noisy[valid], 'r.', markersize=3, alpha=0.6, label='Измерения')
 
         # 3. Оценка фильтра — зелёная линия

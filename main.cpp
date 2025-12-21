@@ -629,8 +629,8 @@ void test_basic()
     config.initial_state << 0.0, 0.0;  // Очень далеко от рабочей точки
 
     // Чрезвычайно плохо обусловленная P0
-    config.initial_covariance << 1e50, 0,
-            0,   1e50;
+    config.initial_covariance << 1e-35, 0,
+            0,   1e-35;
 
     config.output_dir = "./data/verhaegen_test6_easy";
     config.seed = 66666;

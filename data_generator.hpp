@@ -97,6 +97,8 @@ namespace data_generator {
         std::vector<Eigen::Vector2d> srcf_estimates;           /**< Оценки SRCF */
         std::vector<Eigen::Matrix2d> ckf_covariances;          /**< Ковариации CKF */
         std::vector<Eigen::Matrix2d> srcf_covariances;         /**< Ковариации SRCF */
+        double ckf_time_count = 0.0;
+        double srcf_time_count = 0.0;
 
         /**
          * @struct FilterMetrics
@@ -413,22 +415,20 @@ namespace data_generator {
             }
             log("[MODEL0] Generation completed: " +
                 std::to_string(data.true_states.size()) + " steps");
-            double ckf_time_count = 0.0;
-            double srcf_time_count = 0.0;
             std::cerr << "Время CKF (steps): " << std::endl;
             for (double ckf_step_time : data.ckf_step_times) {
                 std::cout << ckf_step_time << " ";
-                ckf_time_count += ckf_step_time;
+                data.ckf_time_count += ckf_step_time;
             }
             std::cout << std::endl;
-            std::cerr << "Сумма времен CKF: " << ckf_time_count << std::endl;
+            std::cerr << "Сумма времен CKF: " << data.ckf_time_count << std::endl;
             std::cerr << "Время SRCF (steps): " << std::endl;
             for (double srcf_step_time : data.srcf_step_times) {
                 std::cout << srcf_step_time << " ";
-                srcf_time_count += srcf_step_time;
+                data.srcf_time_count += srcf_step_time;
             }
             std::cout << std::endl;
-            std::cerr << "Сумма времен SCRF: " << srcf_time_count << std::endl;
+            std::cerr << "Сумма времен SCRF: " << data.srcf_time_count << std::endl;
         }
 
         /**
@@ -531,22 +531,20 @@ namespace data_generator {
             }
             log("[MODEL2] Generation completed: " +
                 std::to_string(data.true_states.size()) + " steps");
-            double ckf_time_count = 0.0;
-            double srcf_time_count = 0.0;
             std::cerr << "Время CKF (steps): " << std::endl;
             for (double ckf_step_time : data.ckf_step_times) {
                 std::cout << ckf_step_time << " ";
-                ckf_time_count += ckf_step_time;
+                data.ckf_time_count += ckf_step_time;
             }
             std::cout << std::endl;
-            std::cerr << "Сумма времен CKF: " << ckf_time_count << std::endl;
+            std::cerr << "Сумма времен CKF: " << data.ckf_time_count << std::endl;
             std::cerr << "Время SRCF (steps): " << std::endl;
             for (double srcf_step_time : data.srcf_step_times) {
                 std::cout << srcf_step_time << " ";
-                srcf_time_count += srcf_step_time;
+                data.srcf_time_count += srcf_step_time;
             }
             std::cout << std::endl;
-            std::cerr << "Сумма времен SCRF: " << srcf_time_count << std::endl;
+            std::cerr << "Сумма времен SCRF: " << data.srcf_time_count << std::endl;
         }
 
         /**
@@ -819,9 +817,9 @@ namespace data_generator {
 
             file << "srcf_phi,srcf_p,";
             if (config_.test_ckf) {
-                file << "ckf_cov_11,ckf_cov_12,ckf_cov_21,ckf_cov_22,";
+                file << "ckf_cov_11,ckf_cov_12,ckf_cov_21,ckf_cov_22,ckf_time";
             }
-            file << "srcf_cov_11,srcf_cov_12,srcf_cov_21,srcf_cov_22\n";
+            file << "srcf_cov_11,srcf_cov_12,srcf_cov_21,srcf_cov_22, srcf_time\n";
             file << std::fixed << std::setprecision(20);
 
             for (size_t i = 0; i < data.times.size() - 1; ++i) {
@@ -839,16 +837,19 @@ namespace data_generator {
 
                 if (config_.test_ckf) {
                     file << data.ckf_covariances[i](0,0) << "," << data.ckf_covariances[i](0,1) << ","
-                         << data.ckf_covariances[i](1,0) << "," << data.ckf_covariances[i](1,1) << ",";
+                         << data.ckf_covariances[i](1,0) << "," << data.ckf_covariances[i](1,1) << ","
+                         << data.ckf_step_times[i] << ",";
                 }
 
                 file << data.srcf_covariances[i](0,0) << "," << data.srcf_covariances[i](0,1) << ","
-                     << data.srcf_covariances[i](1,0) << "," << data.srcf_covariances[i](1,1) << "\n";
+                     << data.srcf_covariances[i](1,0) << "," << data.srcf_covariances[i](1,1) << ","
+                     << data.srcf_step_times[i] << "\n";
             }
             file.close();
             // Сохранение конфигурации
             saveConfig();
             saveMetrics(data, config_.output_dir + "/metrics.txt");
+            saveStatisticsTXT(data, config_.output_dir + "/statistics.txt");
             saveComparisonStats(data, config_.output_dir + "/comparison_stats.txt");
         }
 
@@ -1113,13 +1114,15 @@ namespace data_generator {
             file << "  Average error: " << ckf_avg_error << "\n";
             file << "  Maximum error: " << ckf_max_error << "\n";
             file << "  RMS error:     " << ckf_rms << "\n";
-            file << "  Error ratio (SRCF/CKF): " << srcf_avg_error / ckf_avg_error << "\n\n";
+            file << "  Error ratio (SRCF/CKF): " << srcf_avg_error / ckf_avg_error << "\n";
+            file << "  CKF_Time_ns: " << data.ckf_time_count << "\n\n";
 
             file << "SRCF Statistics:\n";
             file << "  Average error: " << srcf_avg_error << "\n";
             file << "  Maximum error: " << srcf_max_error << "\n";
             file << "  RMS error:     " << srcf_rms << "\n";
-            file << "  Error ratio (CKF/SRCF): " << ckf_avg_error / srcf_avg_error << "\n\n";
+            file << "  Error ratio (CKF/SRCF): " << ckf_avg_error / srcf_avg_error << "\n";
+            file << "  SRCF_Time_ns: " << data.srcf_time_count << "\n\n";
 
             if (config_.test_ckf) {
                 file << "DETAILED COMPARISON (SRCF vs CKF):\n";

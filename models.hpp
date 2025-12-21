@@ -609,9 +609,9 @@ namespace model2
     Eigen::MatrixXd Phi(double dt)
     {
         Eigen::Matrix2d phi;
-//        double coeff = 20.0/19.0;
-//        double exp_1_term = exp(-0.05 * dt);
-//        double exp_2_term = exp(-1.0 * dt);
+        double coeff = 20.0/19.0;
+        double exp_1_term = exp(-0.05 * dt);
+        double exp_2_term = exp(-1.0 * dt);
 //        double exp_term = exp(-0.5 * dt);
 //        double sin_term = sin(1.5 * dt);
 //        double cos_term = cos(1.5 * dt);
@@ -619,16 +619,10 @@ namespace model2
 //        phi(0,1) = exp_term * (2.0 * sin_term / 3.0);
 //        phi(1,0) = exp_term * (-5.0 * sin_term / 3.0);
 //        phi(1,1) = exp_term * (-sin_term / 3.0 + cos_term);
-//        phi(0,0) = coeff * (exp_1_term - 0.05 * exp_2_term);
-//        phi(0,1) = coeff * (-0.05 * exp_1_term + 0.05 * exp_2_term);
-//        phi(1,0) = coeff * (exp_1_term - exp_2_term);
-//        phi(1,1) = coeff * (-0.05 * exp_1_term + exp_2_term);
-        double coeff = 1.0/1.05;
-        double exp_1_term = exp(-1.05 * dt);
-        phi(0,0) = coeff * 1.05;
-        phi(0,1) = coeff * (1 - exp_1_term);
-        phi(1,0) = 0;
-        phi(1,1) = coeff * (1.05 * exp_1_term);
+        phi(0,0) = coeff * (exp_1_term - 0.05 * exp_2_term);
+        phi(0,1) = coeff * (-0.05 * exp_1_term + 0.05 * exp_2_term);
+        phi(1,0) = coeff * (exp_1_term - exp_2_term);
+        phi(1,1) = coeff * (-0.05 * exp_1_term + exp_2_term);
         return phi;
     }
 
@@ -640,24 +634,18 @@ namespace model2
     Eigen::Vector2d Psi(double dt)
     {
         Eigen::Vector2d psi;
-//        double coeff_1 = 3200.0/19.0;
-//        double coeff_2 = 160.0/19.0;
-//        double coeff_3 = 160.0;
-//        double exp_1_term = exp(-0.05 * dt);
-//        double exp_2_term = exp(-1.0 * dt);
+        double coeff_1 = 3200.0/19.0;
+        double coeff_2 = 160.0/19.0;
+        double coeff_3 = 160.0;
+        double exp_1_term = exp(-0.05 * dt);
+        double exp_2_term = exp(-1.0 * dt);
 //        double exp_term = exp(-0.5 * dt);
 //        double sin_term = sin(1.5 * dt);
 //        double cos_term = cos(1.5 * dt);
 //        psi(0) = -2 * sin_term * exp_term - 6 * cos_term * exp_term + 6;
 //        psi(1) = 10 * sin_term * exp_term;
-//        psi(0) = -coeff_1 * exp_1_term + coeff_2 * exp_2_term + coeff_3;
-//        psi(1) = coeff_2 * exp_1_term - coeff_2 * exp_2_term;
-        double coeff_1 = 3360.0/441.0;
-        double coeff_2 = 3200.0/441.0;
-        double coeff_3 = 160.0/21.0;
-        double exp_1_term = exp(-1.05 * dt);
-        psi(0) = coeff_1 * dt + coeff_2 * (exp_1_term - 1);
-        psi(1) = -coeff_3 * exp_1_term + coeff_3;
+        psi(0) = -coeff_1 * exp_1_term + coeff_2 * exp_2_term + coeff_3;
+        psi(1) = coeff_2 * exp_1_term - coeff_2 * exp_2_term;
         return psi;
     }
 
@@ -669,24 +657,18 @@ namespace model2
     Eigen::Vector2d Gamma(double dt)
     {
         Eigen::Vector2d gamma;
-//        double coeff_1 = 400.0/19.0;
-//        double coeff_2 = 20.0/19.0;
-//        double coeff_3 = 20.0;
-//        double exp_1_term = exp(-0.05 * dt);
-//        double exp_2_term = exp(-1.0 * dt);
+        double coeff_1 = 400.0/19.0;
+        double coeff_2 = 20.0/19.0;
+        double coeff_3 = 20.0;
+        double exp_1_term = exp(-0.05 * dt);
+        double exp_2_term = exp(-1.0 * dt);
 //        double exp_term = exp(-0.5 * dt);
 //        double sin_term = sin(1.5 * dt);
 //        double cos_term = cos(1.5 * dt);
 //        gamma(0) = -2.0 / 15.0 * sin_term * exp_term - 2.0 / 5.0 * cos_term * exp_term + 2.0 / 5.0;
 //        gamma(1) = 2.0 / 3.0 * sin_term * exp_term;
-//        gamma(0) = -coeff_1 * exp_1_term + coeff_2 * exp_2_term + coeff_3;
-//        gamma(1) = coeff_2 * exp_1_term - coeff_2 * exp_2_term;
-        double coeff_1 = 420.0/441.0;
-        double coeff_2 = 400.0/441.0;
-        double coeff_3 = 20.0/21.0;
-        double exp_1_term = exp(-1.05 * dt);
-        gamma(0) = coeff_1 * dt + coeff_2 * (exp_1_term - 1);
-        gamma(1) = -coeff_3 * exp_1_term + coeff_3;
+        gamma(0) = -coeff_1 * exp_1_term + coeff_2 * exp_2_term + coeff_3;
+        gamma(1) = coeff_2 * exp_1_term - coeff_2 * exp_2_term;
         return gamma;
     }
 
@@ -807,10 +789,10 @@ namespace model2
     Eigen::MatrixXd R(double t = 0.0)
     {
         Eigen::Matrix2d R_mat;
-        double rg = sigma_g * sigma_g;  // дисперсия гироскопа
-        double ra = sigma_a * sigma_a;  // дисперсия акселерометра
-        R_mat << rg, 0.0,
-                0.0, ra;
+//        double rg = sigma_g * sigma_g;  // дисперсия гироскопа
+//        double ra = sigma_a * sigma_a;  // дисперсия акселерометра
+//        R_mat << rg, 0.0,
+//                0.0, ra;
 
         // Гарантируем положительную определенность
 //        if (R_mat.determinant() < 1e-18) {
@@ -819,6 +801,8 @@ namespace model2
 //        }
 //        R_mat << 1e-20, 0.0,
 //                0.0,   1e-20;
+        R_mat << 1e-5, 0.0,
+                0.0,   1e-5;
 
         return R_mat;
     }
